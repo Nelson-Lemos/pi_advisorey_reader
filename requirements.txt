@@ -9,6 +9,7 @@ pydantic==2.7.1
 PyMuPDF==1.24.2          # fitz - fast PDF text extraction
 pdfminer.six==20221105   # fallback text extraction
 python-docx==1.1.2       # DOCX generation
+pdf2docx==0.5.8         # faithful PDF->DOCX conversion (recommended)
 Pillow==10.3.0           # image processing
 
 # OCR (optional - requires Tesseract installed on OS)

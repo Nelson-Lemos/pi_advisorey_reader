@@ -20,6 +20,11 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+MAX_CONCURRENT = 4
+TRANSLATE_TIMEOUT = 30
+
+_translation_cache: dict = {}
+
 app = FastAPI(title="PDF Translator Pro", version="5.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
@@ -57,9 +62,11 @@ def load_job(job_id):
         raise HTTPException(404, "Job not found")
     return json.loads(p.read_text(encoding="utf-8"))
 
-def list_jobs():
+def list_jobs(limit=50):
     out = []
     for p in sorted(JOBS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+        if len(out) >= limit:
+            break
         try:
             out.append(json.loads(p.read_text(encoding="utf-8")))
         except Exception:
@@ -69,39 +76,47 @@ def list_jobs():
 
 #  TRANSLATION 
 
-def translate_text(text, lang, translator):
-    """Translate a single string. Returns original if translation fails."""
+def translate_text(text, lang, translator, retry=0):
     if not text or not text.strip():
         return text
+    cache_key = (text, lang)
+    cached = _translation_cache.get(cache_key)
+    if cached is not None:
+        return cached
     try:
         MAX = 4800
         if len(text) <= MAX:
-            r = translator.translate(text)
-            return r.strip() if r else text
-        # Split long text
+            r = translator.translate(text, timeout=TRANSLATE_TIMEOUT)
+            result = r.strip() if r else text
+            _translation_cache[cache_key] = result
+            return result
         parts, buf = [], ""
         for sentence in text.replace(". ", ".|||").split("|||"):
             if len(buf) + len(sentence) < MAX:
                 buf += sentence
             else:
                 if buf:
-                    r = translator.translate(buf)
+                    r = translator.translate(buf, timeout=TRANSLATE_TIMEOUT)
                     parts.append(r.strip() if r else buf)
                 buf = sentence
         if buf:
-            r = translator.translate(buf)
+            r = translator.translate(buf, timeout=TRANSLATE_TIMEOUT)
             parts.append(r.strip() if r else buf)
-        return " ".join(parts)
+        result = " ".join(parts)
+        _translation_cache[cache_key] = result
+        return result
     except Exception as e:
         import time
         msg = str(e)
         if "429" in msg or "TooMany" in msg:
-            time.sleep(4)
-            try:
-                r = translator.translate(text[:MAX])
-                return r.strip() if r else text
-            except Exception:
-                pass
+            wait = min(4 * (2 ** retry), 60)
+            logger.warning("rate limited, waiting %ds (retry %d)", wait, retry)
+            time.sleep(wait)
+            if retry < 3:
+                return translate_text(text, lang, translator, retry=retry + 1)
+            else:
+                logger.warning("max retries exceeded for text")
+                return text
         logger.warning("translate error: %s", e)
         return text
 
@@ -139,7 +154,6 @@ def pdf_to_docx(pdf_path, docx_path, lang="pt", do_translate=True, image_mode="p
     from docx.shared import Pt, RGBColor, Cm, Inches
     from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
-    import io
 
     # Setup translator
     translator = None
@@ -149,11 +163,6 @@ def pdf_to_docx(pdf_path, docx_path, lang="pt", do_translate=True, image_mode="p
             translator = GoogleTranslator(source="auto", target=lang)
         except ImportError:
             logger.warning("deep_translator not installed")
-
-    def tr(text):
-        if translator and text and text.strip():
-            return translate_text(text, lang, translator)
-        return text
 
     #  Try pdf2docx first (best fidelity) 
     try:
@@ -172,6 +181,8 @@ def pdf_to_docx(pdf_path, docx_path, lang="pt", do_translate=True, image_mode="p
         # Handle images in the converted DOCX
         if image_mode == "placeholder":
             _replace_images_in_docx(docx_path)
+        elif image_mode == "remove":
+            _remove_images_from_docx(docx_path)
 
         return
 
@@ -182,54 +193,27 @@ def pdf_to_docx(pdf_path, docx_path, lang="pt", do_translate=True, image_mode="p
 
     #  Fallback: manual block-by-block reconstruction 
     logger.info("Manual PDF->DOCX reconstruction...")
-    doc_out = Document()
-
-    # Match A4 margins
-    for sec in doc_out.sections:
-        sec.top_margin    = Cm(2.54)
-        sec.bottom_margin = Cm(2.54)
-        sec.left_margin   = Cm(3.17)
-        sec.right_margin  = Cm(3.17)
 
     doc_pdf = fitz.open(str(pdf_path))
-    total_elements = 0
 
+    # Phase 1: Extract all elements (text + images) with their metadata
+    pages_content = []
     for pn, page in enumerate(doc_pdf):
-        if pn > 0:
-            doc_out.add_page_break()
-
         pw = page.rect.width
         ph = page.rect.height
-
-        # Get all blocks sorted in reading order
         blocks = sorted(page.get_text("dict")["blocks"],
                         key=lambda b: (round(b["bbox"][1] / 10) * 10, b["bbox"][0]))
-
+        page_els = []
         for block in blocks:
             btype = block["type"]
 
-            #  IMAGE block 
             if btype == 1:
                 if image_mode == "remove":
                     continue
                 label = classify_image(block["bbox"], pw, ph)
-                p = doc_out.add_paragraph()
-                run = p.add_run(label)
-                run.font.size      = Pt(9)
-                run.font.italic    = True
-                run.font.color.rgb = RGBColor(0x77, 0x77, 0x77)
-                # Light grey background
-                pPr = p._p.get_or_add_pPr()
-                shd = OxmlElement("w:shd")
-                shd.set(qn("w:val"), "clear")
-                shd.set(qn("w:color"), "auto")
-                shd.set(qn("w:fill"), "F2F2F2")
-                pPr.append(shd)
-                p.paragraph_format.space_before = Pt(2)
-                p.paragraph_format.space_after  = Pt(2)
+                page_els.append(("image", {"label": label}))
                 continue
 
-            #  TEXT block 
             if btype != 0:
                 continue
 
@@ -237,7 +221,6 @@ def pdf_to_docx(pdf_path, docx_path, lang="pt", do_translate=True, image_mode="p
             if not lines:
                 continue
 
-            # Collect all spans grouped by line
             line_texts = []
             for line in lines:
                 spans = line.get("spans", [])
@@ -248,16 +231,11 @@ def pdf_to_docx(pdf_path, docx_path, lang="pt", do_translate=True, image_mode="p
             if not line_texts:
                 continue
 
-            # Full paragraph text
             full_text = " ".join(t.strip() for t in line_texts if t.strip())
             if not full_text:
                 continue
 
-            # Get dominant formatting from first non-empty span
-            dom_size   = 11.0
-            dom_bold   = False
-            dom_italic = False
-            dom_font   = "Calibri"
+            dom_size, dom_bold, dom_italic, dom_font = 11.0, False, False, "Calibri"
             for line in lines:
                 for span in line.get("spans", []):
                     if span.get("text", "").strip():
@@ -271,75 +249,166 @@ def pdf_to_docx(pdf_path, docx_path, lang="pt", do_translate=True, image_mode="p
                 break
 
             font_pt = min(max(round(dom_size), 6), 72)
+            page_els.append(("text", {
+                "text": full_text, "size": dom_size, "bold": dom_bold,
+                "italic": dom_italic, "font": dom_font, "font_pt": font_pt
+            }))
 
-            # Translate
-            translated = tr(full_text)
-            total_elements += 1
+        pages_content.append(page_els)
 
-            # Heading detection: large+bold, short text
-            is_heading = (font_pt >= 14 or (font_pt >= 12 and dom_bold)) \
-                         and len(translated) < 200
+    doc_pdf.close()
+
+    # Phase 2: Translate all unique texts sequentially (avoid rate limit)
+    if translator:
+        import time
+        all_texts = []
+        for page_els in pages_content:
+            for el_type, el_data in page_els:
+                if el_type == "text" and el_data["text"].strip():
+                    all_texts.append(el_data["text"])
+        unique_texts = list(dict.fromkeys(all_texts))
+        translated_map = {}
+
+        for t in unique_texts:
+            key = (t, lang)
+            if key not in _translation_cache:
+                translate_text(t, lang, translator)
+                time.sleep(0.1)
+            translated_map[t] = _translation_cache.get(key, t)
+    else:
+        translated_map = {}
+
+    # Phase 3: Build DOCX with pre-translated texts
+    doc_out = Document()
+    for sec in doc_out.sections:
+        sec.top_margin    = Cm(2.54)
+        sec.bottom_margin = Cm(2.54)
+        sec.left_margin   = Cm(3.17)
+        sec.right_margin  = Cm(3.17)
+
+    for pn, page_els in enumerate(pages_content):
+        if pn > 0:
+            doc_out.add_page_break()
+
+        for el_type, el_data in page_els:
+            if el_type == "image":
+                p = doc_out.add_paragraph()
+                run = p.add_run(el_data["label"])
+                run.font.size      = Pt(9)
+                run.font.italic    = True
+                run.font.color.rgb = RGBColor(0x77, 0x77, 0x77)
+                pPr = p._p.get_or_add_pPr()
+                shd = OxmlElement("w:shd")
+                shd.set(qn("w:val"), "clear")
+                shd.set(qn("w:color"), "auto")
+                shd.set(qn("w:fill"), "F2F2F2")
+                pPr.append(shd)
+                p.paragraph_format.space_before = Pt(2)
+                p.paragraph_format.space_after  = Pt(2)
+                continue
+
+            if el_type != "text":
+                continue
+
+            text = translated_map.get(el_data["text"], el_data["text"])
+            is_heading = (el_data["font_pt"] >= 14 or (el_data["font_pt"] >= 12 and el_data["bold"])) \
+                         and len(text) < 200
 
             if is_heading:
-                level = 1 if font_pt >= 20 else (2 if font_pt >= 16 else 3)
-                p = doc_out.add_heading(translated, level=level)
+                level = 1 if el_data["font_pt"] >= 20 else (2 if el_data["font_pt"] >= 16 else 3)
+                p = doc_out.add_heading(text, level=level)
             else:
                 p   = doc_out.add_paragraph()
-                run = p.add_run(translated)
-                run.bold      = dom_bold
-                run.italic    = dom_italic
-                run.font.size = Pt(font_pt)
+                run = p.add_run(text)
+                run.bold      = el_data["bold"]
+                run.italic    = el_data["italic"]
+                run.font.size = Pt(el_data["font_pt"])
                 try:
-                    run.font.name = dom_font.split("+")[-1] if "+" in dom_font else dom_font
+                    font_name = el_data["font"]
+                    run.font.name = font_name.split("+")[-1] if "+" in font_name else font_name
                 except Exception:
                     pass
 
-            # Spacing proportional to original
             p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after  = Pt(round(dom_size * 0.3))
+            p.paragraph_format.space_after  = Pt(round(el_data["size"] * 0.3))
 
-    doc_pdf.close()
     doc_out.save(str(docx_path))
-    logger.info("Manual reconstruction done: %d elements", total_elements)
+    total_els = sum(len(pe) for pe in pages_content)
+    logger.info("Manual reconstruction done: %d elements", total_els)
 
 
 def _translate_docx_inplace(docx_path, translator, lang):
     """Translate all text in an existing DOCX file in-place."""
     from docx import Document
-    doc = Document(str(docx_path))
-    done = 0
+    import time
 
-    # Paragraphs
+    doc = Document(str(docx_path))
+
+    # Phase 1: Collect all unique texts that need translation
+    texts_to_translate = set()
     for para in doc.paragraphs:
         if para.text.strip():
-            translated = translate_text(para.text, lang, translator)
-            if translated and translated != para.text:
-                # Replace text preserving runs formatting
-                if len(para.runs) == 1:
-                    para.runs[0].text = translated
-                else:
-                    # Clear all runs, put text in first
-                    for i, run in enumerate(para.runs):
-                        run.text = translated if i == 0 else ""
-            done += 1
-
-    # Tables
+            texts_to_translate.add(para.text)
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for para in cell.paragraphs:
                     if para.text.strip():
-                        translated = translate_text(para.text, lang, translator)
-                        if translated and translated != para.text:
-                            if len(para.runs) == 1:
-                                para.runs[0].text = translated
-                            elif para.runs:
-                                for i, run in enumerate(para.runs):
-                                    run.text = translated if i == 0 else ""
-                        done += 1
+                        texts_to_translate.add(para.text)
 
-    doc.save(str(docx_path))
-    logger.info("Translated %d paragraphs in DOCX", done)
+    # Phase 2: Pre-translate all unique texts sequentially (avoid rate limit)
+    translated = 0
+    for t in texts_to_translate:
+        key = (t, lang)
+        if key not in _translation_cache:
+            try:
+                translate_text(t, lang, translator)
+                translated += 1
+            except Exception as e:
+                logger.warning("translate_text error: %s", e)
+            time.sleep(0.1)
+
+    # Phase 3: Apply translations
+    done = 0
+    errors = 0
+    for para in doc.paragraphs:
+        try:
+            if para.text.strip():
+                cached = _translation_cache.get((para.text, lang))
+                translated = cached if cached is not None else para.text
+                if translated != para.text:
+                    if len(para.runs) >= 1:
+                        para.runs[0].text = translated
+                        for run in para.runs[1:]:
+                            run.text = ""
+                done += 1
+        except Exception as e:
+            errors += 1
+            logger.warning("Error applying translation to paragraph: %s", e)
+
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    try:
+                        if para.text.strip():
+                            cached = _translation_cache.get((para.text, lang))
+                            translated = cached if cached is not None else para.text
+                            if translated != para.text:
+                                if len(para.runs) >= 1:
+                                    para.runs[0].text = translated
+                                    for run in para.runs[1:]:
+                                        run.text = ""
+                            done += 1
+                    except Exception as e:
+                        errors += 1
+                        logger.warning("Error applying translation to cell: %s", e)
+
+    try:
+        doc.save(str(docx_path))
+        logger.info("Translated %d paragraphs in DOCX (%d new, %d errors)", done, translated, errors)
+    except Exception as e:
+        logger.error("Failed to save DOCX after translation: %s", e)
 
 
 def _replace_images_in_docx(docx_path):
@@ -371,6 +440,33 @@ def _replace_images_in_docx(docx_path):
     doc.save(str(docx_path))
     if replaced:
         logger.info("Replaced %d images with placeholders in DOCX", replaced)
+
+
+def _remove_images_from_docx(docx_path):
+    """Remove all images from DOCX file entirely."""
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    doc = Document(str(docx_path))
+    removed = 0
+
+    for para in doc.paragraphs:
+        drawings = para._p.findall('.//' + qn('w:drawing'))
+        if not drawings:
+            drawings = para._p.findall('.//' + qn('wp:inline'))
+        if drawings:
+            for drawing in drawings:
+                para._p.remove(drawing)
+                removed += 1
+            # Clean up empty runs
+            for run in para.runs[:]:
+                if not run.text.strip() and not run._r.findall('.//' + qn('w:drawing')):
+                    if not run._r.findall('.//' + qn('wp:inline')):
+                        run._r.getparent().remove(run._r)
+
+    doc.save(str(docx_path))
+    if removed:
+        logger.info("Removed %d images from DOCX", removed)
 
 
 #  FILE PROCESSOR 
@@ -418,23 +514,48 @@ async def run_job(job_id, lang, image_mode, do_translate):
     job["started_at"] = datetime.now().isoformat()
     save_job(job)
 
-    loop = asyncio.get_event_loop()
-    for idx, fi in enumerate(job["files"]):
+    _translation_cache.clear()
+    loop  = asyncio.get_event_loop()
+    files = job["files"]
+    total = len(files)
+    sem   = asyncio.Semaphore(MAX_CONCURRENT)
+    lock  = asyncio.Lock()
+    save_counter = 0
+
+    for fi in files:
         fi["status"] = "processing"
-        save_job(job)
+    save_job(job)
 
-        updated = await loop.run_in_executor(
-            None, process_file, fi, out_dir, lang, image_mode, do_translate)
+    async def process_one(idx, fi):
+        nonlocal save_counter, job
+        async with sem:
+            updated = await loop.run_in_executor(
+                None, process_file, fi, out_dir, lang, image_mode, do_translate)
+        async with lock:
+            job["files"][idx] = updated
+            if updated.get("status") == "completed":
+                job["processed"] += 1
+            else:
+                job["failed"] += 1
+            job["percentage"] = round(
+                (job["processed"] + job["failed"]) / total * 100, 1)
+            save_counter += 1
+            if save_counter % 5 == 0:
+                save_job(job)
 
-        job["files"][idx] = updated
-        if updated.get("status") == "completed":
-            job["processed"] += 1
-        else:
-            job["failed"] += 1
-        job["percentage"] = round(
-            (job["processed"] + job["failed"]) / job["total"] * 100, 1)
+    try:
+        await asyncio.gather(*[process_one(i, f) for i, f in enumerate(files)])
+    except Exception as e:
+        logger.error("run_job error: %s", e)
+        job["status"] = "failed"
+        for fi in job["files"]:
+            if fi.get("status") not in ("completed", "failed"):
+                fi["status"] = "failed"
+                fi["error"]  = str(e)
         save_job(job)
-        await asyncio.sleep(0.1)
+        return
+
+    save_job(job)
 
     # Create ZIP
     zip_path = OUTPUT_DIR / (job_id + "_all.zip")
@@ -616,5 +737,4 @@ async def delete_job(job_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True,
-                reload_dirs=[str(BASE_DIR)])
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)

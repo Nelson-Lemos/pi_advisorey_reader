@@ -1,0 +1,27 @@
+{
+  "job_id": "f68768db-93a2-449c-a0de-7c583493d1ef",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "9dd9112e-6d36-48b9-b708-e8b5fa92fa01",
+      "name": "test_10pag_en.pdf",
+      "size": 8023,
+      "upload_path": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\uploads\\f68768db-93a2-449c-a0de-7c583493d1ef\\test_10pag_en.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\outputs\\f68768db-93a2-449c-a0de-7c583493d1ef\\test_10pag_en_convertido.docx",
+      "output_name": "test_10pag_en_convertido.docx",
+      "size_kb": 36.2
+    }
+  ],
+  "created_at": "2026-06-02T15:55:24.496215",
+  "target_language": "none",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T15:55:24.558110",
+  "zip_path": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\outputs\\f68768db-93a2-449c-a0de-7c583493d1ef_all.zip",
+  "output_dir": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\outputs\\f68768db-93a2-449c-a0de-7c583493d1ef",
+  "completed_at": "2026-06-02T15:55:25.479404"
+}

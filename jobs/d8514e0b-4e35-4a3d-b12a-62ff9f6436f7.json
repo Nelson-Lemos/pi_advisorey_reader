@@ -1,0 +1,21 @@
+{
+  "job_id": "d8514e0b-4e35-4a3d-b12a-62ff9f6436f7",
+  "status": "processing",
+  "total": 1,
+  "processed": 0,
+  "failed": 0,
+  "percentage": 0.0,
+  "files": [
+    {
+      "id": "96b8a967-d83c-49dc-bd37-52de90593708",
+      "name": "teste_documento_50_paginas.pdf",
+      "size": 99984,
+      "upload_path": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\uploads\\d8514e0b-4e35-4a3d-b12a-62ff9f6436f7\\teste_documento_50_paginas.pdf",
+      "status": "processing"
+    }
+  ],
+  "created_at": "2026-06-02T15:57:06.739286",
+  "target_language": "pt",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T15:57:06.837474"
+}
