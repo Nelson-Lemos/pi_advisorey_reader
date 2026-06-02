@@ -1,0 +1,24 @@
+{
+  "job_id": "3774cab2-0ca6-4f37-a202-bd54f5c408eb",
+  "status": "completed",
+  "total": 1,
+  "processed": 0,
+  "failed": 1,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "9da8cb3c-ddc8-4e69-bca6-3149b36f5dc2",
+      "name": "OpenBridge Angola - Plataforma Nacional de Open Banking (1).pdf",
+      "size": 8696390,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\3774cab2-0ca6-4f37-a202-bd54f5c408eb\\OpenBridge Angola - Plataforma Nacional de Open Banking (1).pdf",
+      "status": "failed",
+      "error": "[Errno 2] No such file or directory: 'C:\\\\Users\\\\HP ZBOOK 15 G3\\\\3D Objects\\\\Img do Discurso\\\\Py Advisor\\\\outputs\\\\3774cab2-0ca6-4f37-a202-bd54f5c408eb\\\\OpenBridge Angola - Plataforma Nacional de Open Banking (1)_traduzido.docx'"
+    }
+  ],
+  "created_at": "2026-06-02T06:10:48.447594",
+  "target_language": "en",
+  "image_mode": "remove",
+  "started_at": "2026-06-02T06:10:48.515029",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\3774cab2-0ca6-4f37-a202-bd54f5c408eb_all.zip",
+  "completed_at": "2026-06-02T06:17:19.337539"
+}

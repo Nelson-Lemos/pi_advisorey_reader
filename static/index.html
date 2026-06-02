@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Tradutor Pro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0f;
+  --surface: #111118;
+  --surface2: #18181f;
+  --border: #23232f;
+  --border2: #2e2e3d;
+  --accent: #7c5cfc;
+  --accent2: #a78bfa;
+  --accent-dim: rgba(124,92,252,0.12);
+  --accent-glow: rgba(124,92,252,0.25);
+  --green: #22c55e;
+  --green-dim: rgba(34,197,94,0.12);
+  --amber: #f59e0b;
+  --amber-dim: rgba(245,158,11,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --blue: #3b82f6;
+  --text: #e8e8f0;
+  --text2: #a0a0b8;
+  --text3: #5a5a72;
+  --radius: 12px;
+  --radius-lg: 20px;
+  --shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Background grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(124,92,252,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124,92,252,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Glow orbs */
+body::after {
+  content: '';
+  position: fixed;
+  top: -200px; right: -200px;
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(124,92,252,0.08) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px 80px;
+}
+
+/* ── Header ── */
+header {
+  padding: 48px 0 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 48px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.logo-icon {
+  width: 44px; height: 44px;
+  background: linear-gradient(135deg, var(--accent), #c084fc);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+
+.logo h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.logo h1 span { color: var(--accent2); }
+
+.status-pill {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px;
+  background: var(--green-dim);
+  border: 1px solid rgba(34,197,94,0.2);
+  border-radius: 100px;
+  font-size: 12px;
+  color: var(--green);
+  font-family: 'DM Mono', monospace;
+}
+
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.8); }
+}
+
+/* ── Tabs ── */
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 4px;
+  width: fit-content;
+  margin-bottom: 40px;
+}
+
+.tab-btn {
+  padding: 9px 20px;
+  border: none;
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--text3);
+  background: transparent;
+  transition: all 0.2s;
+  display: flex; align-items: center; gap: 7px;
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 12px var(--accent-glow);
+}
+
+.tab-btn:not(.active):hover { color: var(--text2); background: var(--surface2); }
+
+/* ── Upload Zone ── */
+.upload-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  margin-bottom: 28px;
+}
+
+.drop-zone {
+  border: 2px dashed var(--border2);
+  border-radius: var(--radius);
+  padding: 64px 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  background: var(--bg);
+}
+
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.drop-zone.drag-over .drop-icon { transform: scale(1.1); }
+
+.drop-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  transition: transform 0.2s;
+  display: block;
+}
+
+.drop-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.drop-sub {
+  font-size: 14px;
+  color: var(--text3);
+  margin-bottom: 20px;
+}
+
+.drop-types {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.type-badge {
+  padding: 4px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--text3);
+}
+
+#fileInput { display: none; }
+
+/* ── Options Panel ── */
+.options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+@media (max-width: 640px) { .options-grid { grid-template-columns: 1fr; } }
+
+.option-group {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+
+.option-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 10px;
+}
+
+.option-select {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%235a5a72' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  transition: border-color 0.2s;
+}
+
+.option-select:focus { border-color: var(--accent); }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toggle-info { flex: 1; }
+.toggle-info strong { font-size: 14px; font-weight: 500; display: block; margin-bottom: 2px; }
+.toggle-info small { font-size: 12px; color: var(--text3); }
+
+.toggle {
+  width: 44px; height: 24px;
+  border-radius: 100px;
+  background: var(--border2);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+  border: none;
+  flex-shrink: 0;
+}
+
+.toggle.on { background: var(--accent); }
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 18px; height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+.toggle.on::after { transform: translateX(20px); }
+
+/* ── File List ── */
+.file-list-section {
+  display: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.file-list-section.visible { display: block; }
+
+.file-list-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface2);
+}
+
+.file-list-header strong {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.file-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--accent2);
+  background: var(--accent-dim);
+  border: 1px solid rgba(124,92,252,0.2);
+  padding: 3px 9px;
+  border-radius: 100px;
+}
+
+.file-list { max-height: 320px; overflow-y: auto; }
+
+.file-list::-webkit-scrollbar { width: 4px; }
+.file-list::-webkit-scrollbar-track { background: transparent; }
+.file-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+  animation: slide-in 0.25s ease;
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.file-item:last-child { border-bottom: none; }
+.file-item:hover { background: var(--surface2); }
+
+.file-icon {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, #ef4444, #f97316);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.file-meta { flex: 1; min-width: 0; }
+.file-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+.file-size {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.file-status {
+  font-size: 12px;
+  font-family: 'DM Mono', monospace;
+  padding: 3px 9px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.file-status.pending { color: var(--text3); background: var(--surface2); border: 1px solid var(--border); }
+.file-status.processing { color: var(--amber); background: var(--amber-dim); border: 1px solid rgba(245,158,11,0.2); }
+.file-status.completed { color: var(--green); background: var(--green-dim); border: 1px solid rgba(34,197,94,0.2); }
+.file-status.failed { color: var(--red); background: var(--red-dim); border: 1px solid rgba(239,68,68,0.2); }
+
+.file-action {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text3);
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.15s;
+  font-size: 15px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.file-action:hover { color: var(--red); background: var(--red-dim); }
+
+/* ── Action Bar ── */
+.action-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), #9333ea);
+  color: #fff;
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 28px var(--accent-glow); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.btn-secondary {
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover { background: var(--surface); color: var(--text); border-color: var(--border2); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text3);
+  padding: 12px 16px;
+}
+
+.btn-ghost:hover { color: var(--text2); background: var(--surface2); }
+
+/* ── Progress Card ── */
+.progress-card {
+  display: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px 36px;
+  margin-bottom: 24px;
+}
+
+.progress-card.visible { display: block; }
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.progress-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.progress-pct {
+  font-family: 'DM Mono', monospace;
+  font-size: 32px;
+  font-weight: 300;
+  color: var(--accent2);
+  line-height: 1;
+}
+
+.progress-bar-wrap {
+  height: 8px;
+  background: var(--surface2);
+  border-radius: 100px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #c084fc);
+  border-radius: 100px;
+  transition: width 0.5s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+.progress-stats {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-val {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.stat.completed .stat-val { color: var(--green); }
+.stat.failed .stat-val { color: var(--red); }
+.stat.remaining .stat-val { color: var(--text2); }
+
+/* ── Result Card ── */
+.result-card {
+  display: none;
+  background: linear-gradient(135deg, rgba(34,197,94,0.05), rgba(124,92,252,0.05));
+  border: 1px solid rgba(34,197,94,0.2);
+  border-radius: var(--radius-lg);
+  padding: 32px 36px;
+  margin-bottom: 24px;
+}
+
+.result-card.visible { display: block; }
+
+.result-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.result-icon {
+  width: 52px; height: 52px;
+  background: var(--green-dim);
+  border: 1px solid rgba(34,197,94,0.3);
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px;
+}
+
+.result-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.result-sub { font-size: 14px; color: var(--text3); }
+
+.result-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn-download {
+  background: var(--green);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(34,197,94,0.25);
+}
+
+.btn-download:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(34,197,94,0.35); }
+
+/* ── History ── */
+.history-section { display: none; }
+.history-section.visible { display: block; }
+
+.history-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.history-empty {
+  text-align: center;
+  padding: 60px 32px;
+  color: var(--text3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.history-empty .empty-icon { font-size: 36px; margin-bottom: 12px; }
+
+.history-list { display: flex; flex-direction: column; gap: 12px; }
+
+.history-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: border-color 0.2s;
+}
+
+.history-card:hover { border-color: var(--border2); }
+
+.h-status-icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.h-status-icon.completed { background: var(--green-dim); }
+.h-status-icon.processing { background: var(--amber-dim); }
+.h-status-icon.failed { background: var(--red-dim); }
+.h-status-icon.pending { background: var(--surface2); }
+
+.h-info { flex: 1; min-width: 0; }
+
+.h-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.h-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--text3);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.h-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+/* ── Toast ── */
+#toastContainer {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  padding: 12px 18px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+  animation: toast-in 0.3s ease;
+  max-width: 320px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toast.success { border-color: rgba(34,197,94,0.3); }
+.toast.error { border-color: rgba(239,68,68,0.3); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Loading spinner ── */
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Scrollbar global ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  header { padding: 28px 0 24px; }
+  .upload-card { padding: 20px; }
+  .drop-zone { padding: 40px 16px; }
+  .progress-card, .result-card { padding: 20px; }
+  .progress-pct { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">📄</div>
+      <h1>PDF <span>Tradutor</span> Pro</h1>
+    </div>
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <span>API Online</span>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('upload')" id="tab-upload">
+      ⬆ Novo Trabalho
+    </button>
+    <button class="tab-btn" onclick="showTab('history')" id="tab-history">
+      🕘 Histórico
+    </button>
+  </div>
+
+  <!-- ══ UPLOAD TAB ══ -->
+  <div id="panel-upload">
+
+    <!-- Upload Card -->
+    <div class="upload-card">
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <span class="drop-icon">☁</span>
+        <div class="drop-title">Arraste os seus PDFs aqui</div>
+        <div class="drop-sub">ou clique para seleccionar ficheiros</div>
+        <div class="drop-types">
+          <span class="type-badge">.pdf</span>
+          <span class="type-badge">.zip com PDFs</span>
+          <span class="type-badge">múltiplos ficheiros</span>
+        </div>
+        <input type="file" id="fileInput" accept=".pdf,.zip" multiple>
+      </div>
+
+      <!-- Options -->
+      <div class="options-grid">
+        <div class="option-group">
+          <div class="option-label">&#127760; Idioma de Destino</div>
+          <select class="option-select" id="targetLang">
+            <option value="none">-- Converter apenas (sem traducao) --</option>
+            <option value="pt">&#127477;&#127481; Portugues</option>
+            <option value="en">&#127468;&#127463; Ingles</option>
+            <option value="es">&#127466;&#127480; Espanhol</option>
+            <option value="fr">&#127467;&#127479; Frances</option>
+            <option value="de">&#127465;&#127466; Alemao</option>
+            <option value="it">&#127470;&#127481; Italiano</option>
+            <option value="zh-cn">&#127464;&#127475; Chines</option>
+            <option value="ar">&#127480;&#127462; Arabe</option>
+            <option value="ru">&#127479;&#127482; Russo</option>
+            <option value="ja">&#127471;&#127477; Japones</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <div class="option-label">&#128247; Imagens e Logos</div>
+          <select class="option-select" id="imageMode">
+            <option value="placeholder">[LOGOMARCA] [CARIMBO] marcadores</option>
+            <option value="keep">Manter imagens originais</option>
+            <option value="remove">Remover todas as imagens</option>
+          </select>
+          <div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.5">
+            Logo -&gt; [LOGOMARCA] &nbsp; Carimbo -&gt; [CARIMBO] &nbsp; Figura -&gt; [FIGURA]
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- File List -->
+    <div class="file-list-section" id="fileListSection">
+      <div class="file-list-header">
+        <strong>Ficheiros Seleccionados</strong>
+        <span class="file-count" id="fileCount">0 PDFs</span>
+      </div>
+      <div class="file-list" id="fileList"></div>
+    </div>
+
+    <!-- Progress Card -->
+    <div class="progress-card" id="progressCard">
+      <div class="progress-header">
+        <div>
+          <div class="progress-title" id="progressTitle">A processar...</div>
+          <div style="font-size:13px;color:var(--text3);margin-top:4px" id="progressSub">Aguarde enquanto os documentos são convertidos</div>
+        </div>
+        <div class="progress-pct" id="progressPct">0%</div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progressBar" style="width:0%"></div>
+      </div>
+      <div class="progress-stats">
+        <div class="stat completed">
+          <span class="stat-val" id="statCompleted">0</span>
+          <span class="stat-label">Concluídos</span>
+        </div>
+        <div class="stat failed">
+          <span class="stat-val" id="statFailed">0</span>
+          <span class="stat-label">Falhados</span>
+        </div>
+        <div class="stat remaining">
+          <span class="stat-val" id="statRemaining">0</span>
+          <span class="stat-label">Restantes</span>
+        </div>
+        <div class="stat">
+          <span class="stat-val" id="statTotal">0</span>
+          <span class="stat-label">Total</span>
+        </div>
+      </div>
+    </div>
+
+        <!-- Result Card -->
+    <div class="result-card" id="resultCard">
+      <div class="result-header">
+        <div class="result-icon">&#9989;</div>
+        <div>
+          <div class="result-title" id="resultTitle">Traducao Concluida!</div>
+          <div class="result-sub" id="resultSub">Todos os documentos foram processados</div>
+        </div>
+      </div>
+      <div class="result-actions">
+        <button class="btn btn-download" id="btnDownloadAll" onclick="downloadAll()" style="display:none">
+          &#11015; Descarregar Tudo (ZIP)
+        </button>
+        <div id="zipWaiting" style="font-size:13px;color:var(--amber);display:none;align-items:center;gap:8px">
+          <span class="spinner" style="border-color:rgba(245,158,11,0.3);border-top-color:var(--amber)"></span>
+          A preparar ZIP...
+        </div>
+        <button class="btn btn-secondary" onclick="newJob()">
+          + Novo Trabalho
+        </button>
+      </div>
+      <!-- Individual file downloads -->
+      <div id="resultFileList" style="margin-top:20px;display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+      </div>
+      <div class="result-actions">
+        <button class="btn btn-download" id="btnDownloadAll" onclick="downloadAll()">
+          ⬇ Descarregar Tudo (ZIP)
+        </button>
+        <button class="btn btn-secondary" onclick="newJob()">
+          ＋ Novo Trabalho
+        </button>
+      </div>
+    </div>
+
+    <!-- Action Bar -->
+    <div class="action-bar" id="actionBar">
+      <button class="btn btn-primary" id="btnProcess" onclick="startProcessing()" disabled>
+        ⚡ Processar PDFs
+      </button>
+      <button class="btn btn-ghost" onclick="clearFiles()">
+        🗑 Limpar
+      </button>
+    </div>
+
+  </div><!-- /panel-upload -->
+
+  <!-- ══ HISTORY TAB ══ -->
+  <div id="panel-history" style="display:none">
+    <div class="history-header">
+      <div class="section-title">🕘 Histórico de Trabalhos</div>
+      <button class="btn btn-secondary btn-sm" onclick="loadHistory()">↺ Actualizar</button>
+    </div>
+    <div id="historyContent"></div>
+  </div>
+
+</div><!-- /app -->
+
+<!-- Toast Container -->
+<div id="toastContainer"></div>
+
+<script>
+// State
+var currentJobId = null;
+var pollInterval = null;
+var pendingFiles = [];
+var imageMode = "placeholder";
+
+// API base - auto detect port
+var API_BASE = (window.location.port === '8000' || window.location.port === '')
+  ? '' : 'http://127.0.0.1:8000';
+
+// Tab navigation
+function showTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('panel-upload').style.display = tab === 'upload' ? '' : 'none';
+  document.getElementById('panel-history').style.display = tab === 'history' ? '' : 'none';
+  if (tab === 'history') loadHistory();
+}
+
+// Drag & Drop
+var dropZone = document.getElementById('dropZone');
+var fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  dropZone.classList.add('drag-over');
+});
+dropZone.addEventListener('dragleave', function(e) {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+});
+dropZone.addEventListener('drop', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  dropZone.classList.remove('drag-over');
+  handleFileSelection(Array.from(e.dataTransfer.files));
+});
+dropZone.addEventListener('click', function(e) {
+  if (e.target === fileInput) return;
+  fileInput.click();
+});
+fileInput.addEventListener('change', function() {
+  handleFileSelection(Array.from(fileInput.files));
+});
+
+function handleFileSelection(files) {
+  var valid = files.filter(function(f){ return f.name.match(/\.(pdf|zip)$/i); });
+  if (!valid.length) { toast('Apenas ficheiros PDF ou ZIP sao aceites', 'error'); return; }
+  pendingFiles = pendingFiles.concat(valid);
+  renderFileList();
+  document.getElementById('btnProcess').disabled = false;
+  toast(valid.length + ' ficheiro(s) adicionado(s)', 'success');
+}
+
+function renderFileList() {
+  var section = document.getElementById('fileListSection');
+  var list    = document.getElementById('fileList');
+  var count   = document.getElementById('fileCount');
+  if (!pendingFiles.length) { section.classList.remove('visible'); return; }
+  section.classList.add('visible');
+  count.textContent = pendingFiles.length + (pendingFiles.length === 1 ? ' ficheiro' : ' ficheiros');
+  list.innerHTML = pendingFiles.map(function(f, i) {
+    var icon = f.name.endsWith('.zip') ? '&#128230;' : '&#128196;';
+    return '<div class="file-item" id="pending-' + i + '">' +
+      '<div class="file-icon">' + icon + '</div>' +
+      '<div class="file-meta">' +
+        '<div class="file-name" title="' + f.name + '">' + f.name + '</div>' +
+        '<div class="file-size">' + formatBytes(f.size) + '</div>' +
+      '</div>' +
+      '<div class="file-status pending">pendente</div>' +
+      '<button class="file-action" onclick="removeFile(' + i + ')" title="Remover">&#10005;</button>' +
+    '</div>';
+  }).join('');
+}
+
+function removeFile(i) {
+  pendingFiles.splice(i, 1);
+  renderFileList();
+  if (!pendingFiles.length) document.getElementById('btnProcess').disabled = true;
+}
+
+function clearFiles() {
+  pendingFiles = [];
+  currentJobId = null;
+  renderFileList();
+  document.getElementById('btnProcess').disabled = true;
+  document.getElementById('progressCard').classList.remove('visible');
+  document.getElementById('resultCard').classList.remove('visible');
+  document.getElementById('actionBar').style.display = '';
+  stopPolling();
+}
+
+function newJob() {
+  clearFiles();
+  fileInput.value = '';
+}
+
+// Upload & Process
+async function startProcessing() {
+  if (!pendingFiles.length) { toast('Seleccione pelo menos um ficheiro', 'error'); return; }
+  imageMode = document.getElementById('imageMode').value;
+  var lang  = document.getElementById('targetLang').value;
+
+  var btn = document.getElementById('btnProcess');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> A enviar...';
+
+  try {
+    var formData = new FormData();
+    pendingFiles.forEach(function(f){ formData.append('files', f); });
+
+    var uploadRes = await api('POST', '/api/upload', formData, true);
+    currentJobId = uploadRes.job_id;
+    renderUploadedFiles(uploadRes.files);
+
+    document.getElementById('progressCard').classList.add('visible');
+    document.getElementById('actionBar').style.display = 'none';
+    updateProgress({ processed: 0, failed: 0, total: uploadRes.files_count, percentage: 0 });
+
+    await api('POST', '/api/process', {
+      job_id: currentJobId,
+      target_language: lang,
+      image_mode: imageMode,
+      remove_images: imageMode === 'remove',
+      output_pdf: false
+    });
+
+    toast('Processamento iniciado!', 'success');
+    startPolling();
+
+  } catch (err) {
+    toast('Erro: ' + (err.message || 'Falha no envio'), 'error');
+    btn.disabled = false;
+    btn.innerHTML = '&#9889; Processar PDFs';
+  }
+}
+
+function renderUploadedFiles(files) {
+  var list    = document.getElementById('fileList');
+  var count   = document.getElementById('fileCount');
+  var section = document.getElementById('fileListSection');
+  section.classList.add('visible');
+  count.textContent = files.length + (files.length === 1 ? ' ficheiro' : ' ficheiros');
+  list.innerHTML = files.map(function(f) {
+    return '<div class="file-item" id="file-' + f.id + '">' +
+      '<div class="file-icon">&#128196;</div>' +
+      '<div class="file-meta">' +
+        '<div class="file-name" title="' + f.name + '">' + f.name + '</div>' +
+        '<div class="file-size">' + formatBytes(f.size) + '</div>' +
+      '</div>' +
+      '<div class="file-status pending" id="status-' + f.id + '">pendente</div>' +
+      '<span id="action-' + f.id + '"></span>' +
+    '</div>';
+  }).join('');
+}
+
+// Polling
+function startPolling() {
+  stopPolling();
+  pollInterval = setInterval(pollJobStatus, 2000);
+}
+
+function stopPolling() {
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+}
+
+async function pollJobStatus() {
+  if (!currentJobId) return;
+  try {
+    var job = await api('GET', '/api/jobs/' + currentJobId);
+    updateProgress(job);
+    updateFileStatuses(job.files);
+    if (job.status === 'completed' || job.percentage >= 100) {
+      stopPolling();
+      onJobComplete(job);
+    } else if (job.status === 'failed') {
+      stopPolling();
+      toast('O processamento falhou', 'error');
+    }
+  } catch(e) {
+    console.error('Poll error:', e);
+  }
+}
+
+function updateProgress(job) {
+  var pct = job.percentage || 0;
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = Math.round(pct) + '%';
+  document.getElementById('statCompleted').textContent = job.processed || 0;
+  document.getElementById('statFailed').textContent    = job.failed    || 0;
+  document.getElementById('statTotal').textContent     = job.total     || 0;
+  var remaining = (job.total || 0) - (job.processed || 0) - (job.failed || 0);
+  document.getElementById('statRemaining').textContent = Math.max(0, remaining);
+}
+
+function updateFileStatuses(files) {
+  if (!files) return;
+  var labels = { pending: 'pendente', processing: 'a traduzir...', completed: 'concluido', failed: 'falhou' };
+  files.forEach(function(f) {
+    var statusEl = document.getElementById('status-' + f.id);
+    var actionEl = document.getElementById('action-' + f.id);
+    if (statusEl) {
+      statusEl.className   = 'file-status ' + f.status;
+      statusEl.textContent = labels[f.status] || f.status;
+    }
+    if (actionEl && f.status === 'completed') {
+      var dlUrl = API_BASE + '/api/download/' + currentJobId + '/file/' + f.id;
+      actionEl.innerHTML = '<a href="' + dlUrl + '" class="btn btn-secondary btn-sm" style="text-decoration:none" download>&#11015;</a>';
+    }
+  });
+}
+
+function onJobComplete(job) {
+  document.getElementById('resultCard').classList.add('visible');
+  document.getElementById('progressCard').classList.remove('visible');
+
+  var ok    = job.processed || 0;
+  var fail  = job.failed    || 0;
+  var total = job.total     || 0;
+
+  document.getElementById('resultTitle').textContent =
+    fail === 0 ? 'Traducao Concluida!' : 'Concluido com ' + fail + ' erro(s)';
+  document.getElementById('resultSub').textContent =
+    ok + ' de ' + total + ' documentos traduzidos com sucesso';
+
+  // Individual download buttons
+  var listEl = document.getElementById('resultFileList');
+  if (listEl && job.files) {
+    listEl.innerHTML = job.files.map(function(f) {
+      if (f.status !== 'completed') {
+        return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;' +
+          'background:var(--red-dim);border:1px solid rgba(239,68,68,0.2);' +
+          'border-radius:8px;font-size:13px">' +
+          '<span style="color:var(--red)">&#10060;</span>' +
+          '<span style="flex:1;color:var(--text2)">' + f.name + '</span>' +
+          '<span style="font-size:11px;color:var(--red)">' + (f.error || 'falhou') + '</span>' +
+          '</div>';
+      }
+      var dlUrl  = API_BASE + '/api/download/' + currentJobId + '/file/' + f.id;
+      var ptype  = f.pdf_type === 'scanned' ? ' [OCR]' : '';
+      var chars  = f.chars_extracted ? f.chars_extracted + ' chars' : '';
+      var fname  = f.output_name || f.name;
+      return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;' +
+        'background:var(--green-dim);border:1px solid rgba(34,197,94,0.2);' +
+        'border-radius:8px;font-size:13px">' +
+        '<span>&#128196;</span>' +
+        '<span style="flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"' +
+          ' title="' + fname + '">' + fname + ptype + '</span>' +
+        '<span style="font-size:11px;color:var(--text3);flex-shrink:0">' + chars + '</span>' +
+        '<a href="' + dlUrl + '" download style="padding:5px 14px;background:var(--green);' +
+          'color:#fff;border-radius:6px;text-decoration:none;font-size:12px;font-weight:500;flex-shrink:0">' +
+          '&#11015; DOCX</a>' +
+        '</div>';
+    }).join('');
+  }
+
+  toast(ok + ' documento(s) traduzido(s)!', 'success');
+
+  // Show output folder path
+  api('GET', '/api/outputs/' + currentJobId).then(function(data) {
+    var folderEl = document.getElementById('outputFolderInfo');
+    var pathEl   = document.getElementById('outputFolderPath');
+    if (folderEl && pathEl && data.output_dir) {
+      folderEl.style.display = 'block';
+      pathEl.textContent = data.output_dir;
+    }
+    // If files already exist in output dir, show them immediately
+    if (data.files && data.files.length > 0) {
+      var listEl = document.getElementById('resultFileList');
+      if (listEl) {
+        var extra = data.files.map(function(f) {
+          var dlUrl = API_BASE + '/api/download/' + currentJobId + '/file/direct?name=' + encodeURIComponent(f.name);
+          return '<div style="display:flex;align-items:center;gap:12px;padding:8px 14px;' +
+            'background:var(--green-dim);border:1px solid rgba(34,197,94,0.2);' +
+            'border-radius:8px;font-size:12px;margin-top:4px">' +
+            '<span>&#128196;</span>' +
+            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + f.name + '</span>' +
+            '<span style="color:var(--text3)">' + f.size_kb + ' KB</span>' +
+            '</div>';
+        }).join('');
+        // Append if not already shown
+        if (listEl.innerHTML.indexOf('green-dim') === -1) {
+          listEl.innerHTML = extra;
+        }
+      }
+    }
+  }).catch(function(){});
+
+  // Wait for ZIP to be ready before showing download button
+  waitForZip(currentJobId);
+}
+
+async function downloadAll() {
+  if (!currentJobId) return;
+  window.location.href = API_BASE + '/api/download/' + currentJobId + '/zip';
+}
+
+async function waitForZip(jobId) {
+  // Poll until the ZIP is ready (job status = completed AND zip exists)
+  document.getElementById('btnDownloadAll').style.display = 'none';
+  document.getElementById('zipWaiting').style.display = 'flex';
+
+  for (var attempt = 0; attempt < 60; attempt++) {
+    await new Promise(function(r){ setTimeout(r, 2000); });
+    try {
+      var job = await api('GET', '/api/jobs/' + jobId);
+      if (job.status === 'completed' && job.zip_path) {
+        // Verify the zip endpoint responds OK
+        var test = await fetch(API_BASE + '/api/download/' + jobId + '/zip', { method: 'HEAD' });
+        if (test.ok) {
+          document.getElementById('zipWaiting').style.display = 'none';
+          document.getElementById('btnDownloadAll').style.display = '';
+          toast('ZIP pronto para download!', 'success');
+          return;
+        }
+      }
+    } catch(e) {}
+  }
+  // timeout
+  document.getElementById('zipWaiting').style.display = 'none';
+  document.getElementById('btnDownloadAll').style.display = '';
+}
+
+// History
+async function loadHistory() {
+  var container = document.getElementById('historyContent');
+  container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">A carregar...</div>';
+  try {
+    var jobs = await api('GET', '/api/jobs');
+    if (!jobs.length) {
+      container.innerHTML =
+        '<div class="history-empty">' +
+        '<div class="empty-icon">&#128237;</div>' +
+        '<div>Nenhum trabalho realizado ainda</div>' +
+        '<div style="font-size:12px;margin-top:8px;color:var(--text3)">Faca upload de PDFs para comecar</div>' +
+        '</div>';
+      return;
+    }
+    container.innerHTML = '<div class="history-list">' +
+      jobs.map(function(job){ return historyCard(job); }).join('') +
+      '</div>';
+  } catch(e) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">Erro ao carregar historico</div>';
+  }
+}
+
+function historyCard(job) {
+  var icons = { completed: '&#9989;', processing: '&#9203;', failed: '&#10060;', pending: '&#9208;' };
+  var date  = new Date(job.created_at).toLocaleString('pt-PT');
+  var zipBtn = '';
+  if (job.status === 'completed' && job.zip_path) {
+    zipBtn = '<a href="' + API_BASE + '/api/download/' + job.job_id + '/zip" ' +
+      'class="btn btn-download btn-sm" style="text-decoration:none" download>&#11015; ZIP</a>';
+  }
+  return '<div class="history-card">' +
+    '<div class="h-status-icon ' + job.status + '">' + (icons[job.status] || '&#128196;') + '</div>' +
+    '<div class="h-info">' +
+      '<div class="h-title">' + job.total + ' PDF(s) - ' + (job.target_language || 'pt').toUpperCase() + '</div>' +
+      '<div class="h-meta">' +
+        '<span>&#128197; ' + date + '</span>' +
+        '<span>&#9989; ' + job.processed + '/' + job.total + '</span>' +
+        (job.failed ? '<span style="color:var(--red)">&#10060; ' + job.failed + ' falhados</span>' : '') +
+        '<span>&#128202; ' + job.percentage + '%</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="h-actions">' + zipBtn +
+      '<button class="btn btn-ghost btn-sm" onclick="deleteJob(\'' + job.job_id + '\')">&#128465;</button>' +
+    '</div>' +
+    '</div>';
+}
+
+async function deleteJob(jobId) {
+  if (!confirm('Eliminar este trabalho e todos os ficheiros?')) return;
+  try {
+    await api('DELETE', '/api/jobs/' + jobId);
+    toast('Trabalho eliminado', 'success');
+    loadHistory();
+  } catch(e) {
+    toast('Erro ao eliminar', 'error');
+  }
+}
+
+// API helper
+async function api(method, path, body, isForm) {
+  var opts = { method: method, headers: {} };
+  if (body) {
+    if (isForm) {
+      opts.body = body;
+    } else {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+  }
+  var res = await fetch(API_BASE + path, opts);
+  if (!res.ok) {
+    var err = await res.json().catch(function(){ return { detail: res.statusText }; });
+    throw new Error(err.detail || 'HTTP ' + res.status);
+  }
+  return res.json();
+}
+
+// Toast
+function toast(msg, type) {
+  type = type || 'info';
+  var el  = document.createElement('div');
+  el.className = 'toast ' + type;
+  var emojis = { success: '&#9989;', error: '&#10060;', info: 'ℹ' };
+  el.innerHTML = '<span>' + (emojis[type] || '') + '</span><span>' + msg + '</span>';
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(function(){ el.remove(); }, 4000);
+}
+
+function formatBytes(b) {
+  if (b < 1024)    return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+// Init - check API health
+fetch(API_BASE + '/api/health')
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.status !== 'ok') {
+      document.querySelector('.status-pill').innerHTML =
+        '<div class="status-dot" style="background:var(--amber)"></div><span>Dependencias em falta</span>';
+    }
+  })
+  .catch(function() {
+    document.querySelector('.status-pill').innerHTML =
+      '<div class="status-dot" style="background:var(--red)"></div><span>API Offline</span>';
+  });
+</script>
+</body>
+</html>

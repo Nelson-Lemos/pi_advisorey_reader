@@ -1,0 +1,24 @@
+{
+  "job_id": "220fccbc-340a-4762-9688-96e3e9aea0fb",
+  "status": "completed",
+  "total": 1,
+  "processed": 0,
+  "failed": 1,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "830df485-e6c7-449d-b2b9-63714ff09d40",
+      "name": "Cronograma geral Kila_city.pdf",
+      "size": 634349,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\220fccbc-340a-4762-9688-96e3e9aea0fb\\Cronograma geral Kila_city.pdf",
+      "status": "failed",
+      "error": "No module named 'docx'"
+    }
+  ],
+  "created_at": "2026-06-02T05:47:47.997870",
+  "target_language": "en",
+  "remove_images": false,
+  "started_at": "2026-06-02T05:47:48.053459",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\220fccbc-340a-4762-9688-96e3e9aea0fb_all.zip",
+  "completed_at": "2026-06-02T05:47:48.189292"
+}

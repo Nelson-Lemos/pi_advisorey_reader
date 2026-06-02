@@ -1,0 +1,27 @@
+{
+  "job_id": "9795ef45-b6c4-4e69-a3d3-a7c5ca698458",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "f335f3fe-966c-48bd-9d42-aac6d024f2c4",
+      "name": "Reunião SkillTech_13.pdf",
+      "size": 223026,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\9795ef45-b6c4-4e69-a3d3-a7c5ca698458\\Reunião SkillTech_13.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\9795ef45-b6c4-4e69-a3d3-a7c5ca698458\\Reunião SkillTech_13_traduzido.docx",
+      "output_name": "Reunião SkillTech_13_traduzido.docx",
+      "pdf_type": "text",
+      "chars_extracted": 397
+    }
+  ],
+  "created_at": "2026-06-02T07:02:20.690555",
+  "target_language": "en",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T07:02:20.776405",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\9795ef45-b6c4-4e69-a3d3-a7c5ca698458_all.zip",
+  "completed_at": "2026-06-02T07:03:29.338289"
+}

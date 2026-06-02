@@ -1,0 +1,27 @@
+{
+  "job_id": "dfe3ed60-58d2-4723-a778-e833becc26c4",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "abeeaad9-f0c6-4116-8c86-d06bf1c99186",
+      "name": "reunião_2026_02_26.pdf",
+      "size": 241360,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\dfe3ed60-58d2-4723-a778-e833becc26c4\\reunião_2026_02_26.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\dfe3ed60-58d2-4723-a778-e833becc26c4\\reunião_2026_02_26_traduzido.docx",
+      "output_name": "reunião_2026_02_26_traduzido.docx",
+      "pdf_type": "text",
+      "chars_extracted": 548
+    }
+  ],
+  "created_at": "2026-06-02T07:13:10.288690",
+  "target_language": "en",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T07:13:10.363364",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\dfe3ed60-58d2-4723-a778-e833becc26c4_all.zip",
+  "completed_at": "2026-06-02T07:13:45.237215"
+}

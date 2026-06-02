@@ -1,0 +1,27 @@
+{
+  "job_id": "05ee0738-d56a-491e-ac53-a9b0df4aba5b",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "c1b82a59-785d-438d-9e8d-f26adc10a119",
+      "name": "Oku-Pasula Tour Versão Final.pdf",
+      "size": 1716316,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\05ee0738-d56a-491e-ac53-a9b0df4aba5b\\Oku-Pasula Tour Versão Final.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\05ee0738-d56a-491e-ac53-a9b0df4aba5b\\Oku-Pasula Tour Versão Final_traduzido.docx",
+      "output_name": "Oku-Pasula Tour Versão Final_traduzido.docx",
+      "pdf_type": "scanned",
+      "chars_extracted": 879
+    }
+  ],
+  "created_at": "2026-06-02T07:15:12.011444",
+  "target_language": "en",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T07:15:12.141542",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\05ee0738-d56a-491e-ac53-a9b0df4aba5b_all.zip",
+  "completed_at": "2026-06-02T07:15:44.635070"
+}

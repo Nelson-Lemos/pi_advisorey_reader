@@ -1,0 +1,20 @@
+{
+  "job_id": "edfb983d-ad33-4833-b8b2-a8f4c9178d35",
+  "status": "pending",
+  "total": 1,
+  "processed": 0,
+  "failed": 0,
+  "percentage": 0.0,
+  "files": [
+    {
+      "id": "66a9969a-8ffb-4e8c-a264-a188262f04f3",
+      "name": "Cronograma geral Kila_city.pdf",
+      "size": 634349,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\edfb983d-ad33-4833-b8b2-a8f4c9178d35\\Cronograma geral Kila_city.pdf",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-06-02T05:37:38.151794",
+  "target_language": "pt",
+  "remove_images": false
+}

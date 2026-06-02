@@ -1,0 +1,24 @@
+{
+  "job_id": "e39a6936-238d-4a86-9250-408a47955492",
+  "status": "completed",
+  "total": 1,
+  "processed": 0,
+  "failed": 1,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "86ea33e2-9291-4a18-9976-4a399a41eb4e",
+      "name": "Reunião SkillTech_13.pdf",
+      "size": 223026,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\e39a6936-238d-4a86-9250-408a47955492\\Reunião SkillTech_13.pdf",
+      "status": "failed",
+      "error": "No module named 'docx'"
+    }
+  ],
+  "created_at": "2026-06-02T05:38:13.097278",
+  "target_language": "en",
+  "remove_images": false,
+  "started_at": "2026-06-02T05:38:13.179703",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\e39a6936-238d-4a86-9250-408a47955492_all.zip",
+  "completed_at": "2026-06-02T05:38:13.310919"
+}

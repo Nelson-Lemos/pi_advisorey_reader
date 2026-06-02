@@ -1,0 +1,20 @@
+{
+  "job_id": "16cbf0b4-3a43-4d26-9b9b-0b0b41683203",
+  "status": "pending",
+  "total": 1,
+  "processed": 0,
+  "failed": 0,
+  "percentage": 0.0,
+  "files": [
+    {
+      "id": "1016f570-c997-42fe-883b-f43409a439f8",
+      "name": "SKILL CLUB - Apresentação.pdf",
+      "size": 1169448,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\16cbf0b4-3a43-4d26-9b9b-0b0b41683203\\SKILL CLUB - Apresentação.pdf",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-06-02T06:00:11.622869",
+  "target_language": "pt",
+  "image_mode": "placeholder"
+}

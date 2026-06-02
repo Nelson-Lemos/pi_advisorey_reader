@@ -1,0 +1,27 @@
+{
+  "job_id": "ca524d71-b623-489a-9f0f-41cb3eaa5f94",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "96f91c5b-10c1-4990-a5e4-bd3719ec2143",
+      "name": "1.pdf",
+      "size": 417660,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\ca524d71-b623-489a-9f0f-41cb3eaa5f94\\1.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\ca524d71-b623-489a-9f0f-41cb3eaa5f94\\1_convertido.docx",
+      "output_name": "1_convertido.docx",
+      "size_kb": 308.0
+    }
+  ],
+  "created_at": "2026-06-02T13:53:07.471032",
+  "target_language": "none",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T13:53:07.561287",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\ca524d71-b623-489a-9f0f-41cb3eaa5f94_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\ca524d71-b623-489a-9f0f-41cb3eaa5f94",
+  "completed_at": "2026-06-02T13:53:08.266355"
+}
