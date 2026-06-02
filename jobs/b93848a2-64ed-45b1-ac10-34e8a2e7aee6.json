@@ -1,0 +1,21 @@
+{
+  "job_id": "b93848a2-64ed-45b1-ac10-34e8a2e7aee6",
+  "status": "processing",
+  "total": 1,
+  "processed": 0,
+  "failed": 0,
+  "percentage": 0.0,
+  "files": [
+    {
+      "id": "957b72cc-9ad3-47be-8b17-749751121e69",
+      "name": "1 Technical Part - Volume 1_parte_03_pp201-300 (2).pdf",
+      "size": 65388524,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\b93848a2-64ed-45b1-ac10-34e8a2e7aee6\\1 Technical Part - Volume 1_parte_03_pp201-300 (2).pdf",
+      "status": "processing"
+    }
+  ],
+  "created_at": "2026-06-02T15:46:48.226162",
+  "target_language": "pt",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T15:46:48.594299"
+}

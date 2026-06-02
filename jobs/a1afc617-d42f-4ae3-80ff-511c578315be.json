@@ -1,0 +1,27 @@
+{
+  "job_id": "a1afc617-d42f-4ae3-80ff-511c578315be",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "f2846611-b841-441f-98f7-ab6ada089f2e",
+      "name": "REQUERIMENTO DE PARCERIA.pdf",
+      "size": 431991,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\a1afc617-d42f-4ae3-80ff-511c578315be\\REQUERIMENTO DE PARCERIA.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\a1afc617-d42f-4ae3-80ff-511c578315be\\REQUERIMENTO DE PARCERIA_convertido.docx",
+      "output_name": "REQUERIMENTO DE PARCERIA_convertido.docx",
+      "size_kb": 64.9
+    }
+  ],
+  "created_at": "2026-06-02T14:26:18.135480",
+  "target_language": "none",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T14:26:18.193309",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\a1afc617-d42f-4ae3-80ff-511c578315be_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\a1afc617-d42f-4ae3-80ff-511c578315be",
+  "completed_at": "2026-06-02T14:26:19.470978"
+}

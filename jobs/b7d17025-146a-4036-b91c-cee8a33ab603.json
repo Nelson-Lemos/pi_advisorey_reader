@@ -1,0 +1,37 @@
+{
+  "job_id": "b7d17025-146a-4036-b91c-cee8a33ab603",
+  "status": "completed",
+  "total": 2,
+  "processed": 2,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "0d35c660-6957-4ded-9a5c-6b1dd4ed4bf4",
+      "name": "1.pdf",
+      "size": 417660,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\b7d17025-146a-4036-b91c-cee8a33ab603\\1.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\b7d17025-146a-4036-b91c-cee8a33ab603\\1_convertido.docx",
+      "output_name": "1_convertido.docx",
+      "size_kb": 308.0
+    },
+    {
+      "id": "d74d29f3-0366-40c2-ae8b-c5af69235fa5",
+      "name": "2.pdf",
+      "size": 421726,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\b7d17025-146a-4036-b91c-cee8a33ab603\\2.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\b7d17025-146a-4036-b91c-cee8a33ab603\\2_convertido.docx",
+      "output_name": "2_convertido.docx",
+      "size_kb": 308.5
+    }
+  ],
+  "created_at": "2026-06-02T14:19:57.595411",
+  "target_language": "none",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T14:19:57.673296",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\b7d17025-146a-4036-b91c-cee8a33ab603_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\b7d17025-146a-4036-b91c-cee8a33ab603",
+  "completed_at": "2026-06-02T14:19:59.996270"
+}

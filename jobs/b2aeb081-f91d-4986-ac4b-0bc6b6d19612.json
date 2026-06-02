@@ -1,0 +1,27 @@
+{
+  "job_id": "b2aeb081-f91d-4986-ac4b-0bc6b6d19612",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "f2cb896e-393e-41f1-94d0-d106debbd5f2",
+      "name": "QUESTIONÁRIO DE SATISFAÇÃO DOS COLABORADORES.pdf",
+      "size": 610321,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\b2aeb081-f91d-4986-ac4b-0bc6b6d19612\\QUESTIONÁRIO DE SATISFAÇÃO DOS COLABORADORES.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\b2aeb081-f91d-4986-ac4b-0bc6b6d19612\\QUESTIONÁRIO DE SATISFAÇÃO DOS COLABORADORES_convertido.docx",
+      "output_name": "QUESTIONÁRIO DE SATISFAÇÃO DOS COLABORADORES_convertido.docx",
+      "size_kb": 132.9
+    }
+  ],
+  "created_at": "2026-06-02T14:21:14.755937",
+  "target_language": "none",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T14:21:14.810253",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\b2aeb081-f91d-4986-ac4b-0bc6b6d19612_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\b2aeb081-f91d-4986-ac4b-0bc6b6d19612",
+  "completed_at": "2026-06-02T14:21:20.189879"
+}

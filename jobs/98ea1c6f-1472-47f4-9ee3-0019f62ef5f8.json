@@ -1,0 +1,28 @@
+{
+  "job_id": "98ea1c6f-1472-47f4-9ee3-0019f62ef5f8",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "c14958f1-db37-4be8-a90b-0721955f79fb",
+      "name": "1 Technical Part - Volume 1_parte_03_pp201-300 (1).pdf",
+      "size": 65388524,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\98ea1c6f-1472-47f4-9ee3-0019f62ef5f8\\1 Technical Part - Volume 1_parte_03_pp201-300 (1).pdf",
+      "status": "completed",
+      "pdf_type": "text",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\98ea1c6f-1472-47f4-9ee3-0019f62ef5f8\\1 Technical Part - Volume 1_parte_03_pp201-300 (1)_convertido.docx",
+      "output_name": "1 Technical Part - Volume 1_parte_03_pp201-300 (1)_convertido.docx",
+      "size_kb": 50491.9
+    }
+  ],
+  "created_at": "2026-06-02T15:34:46.824087",
+  "target_language": "none",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T15:34:47.125442",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\98ea1c6f-1472-47f4-9ee3-0019f62ef5f8_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\98ea1c6f-1472-47f4-9ee3-0019f62ef5f8",
+  "completed_at": "2026-06-02T15:35:42.175888"
+}

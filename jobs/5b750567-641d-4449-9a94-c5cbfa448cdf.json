@@ -1,0 +1,27 @@
+{
+  "job_id": "5b750567-641d-4449-9a94-c5cbfa448cdf",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "8a355692-5d56-4e14-a565-ed4368a66dab",
+      "name": "REQUERIMENTO DE PARCERIA Escola IMPTELC.pdf",
+      "size": 432596,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\uploads\\5b750567-641d-4449-9a94-c5cbfa448cdf\\REQUERIMENTO DE PARCERIA Escola IMPTELC.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\5b750567-641d-4449-9a94-c5cbfa448cdf\\REQUERIMENTO DE PARCERIA Escola IMPTELC_convertido.docx",
+      "output_name": "REQUERIMENTO DE PARCERIA Escola IMPTELC_convertido.docx",
+      "size_kb": 64.8
+    }
+  ],
+  "created_at": "2026-06-02T14:24:02.798042",
+  "target_language": "en",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-02T14:24:02.876606",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\5b750567-641d-4449-9a94-c5cbfa448cdf_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\3D Objects\\Img do Discurso\\Py Advisor\\outputs\\5b750567-641d-4449-9a94-c5cbfa448cdf",
+  "completed_at": "2026-06-02T14:24:35.886117"
+}
