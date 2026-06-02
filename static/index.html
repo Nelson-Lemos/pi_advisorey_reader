@@ -6,6 +6,7 @@
 <title>PDF Tradutor Pro</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@0.473.0/dist/umd/lucide.js"></script>
 <style>
 :root {
   --bg: #0a0a0f;
@@ -97,6 +98,7 @@ header {
   display: flex; align-items: center; justify-content: center;
   font-size: 20px;
   box-shadow: 0 4px 20px var(--accent-glow);
+  color: #fff;
 }
 
 .logo h1 {
@@ -377,6 +379,42 @@ header {
 .file-item:last-child { border-bottom: none; }
 .file-item:hover { background: var(--surface2); }
 
+.file-progress {
+  margin-top: 6px;
+  height: 3px;
+  background: var(--border);
+  border-radius: 100px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.file-progress-bar {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 0.4s ease;
+  background: linear-gradient(90deg, var(--accent), #c084fc);
+  width: 0%;
+}
+
+.file-progress-bar.completed { background: var(--green); }
+.file-progress-bar.failed { background: var(--red); }
+
+.file-progress-bar.indeterminate {
+  width: 30%;
+  animation: file-shimmer 1.2s ease-in-out infinite;
+  background: linear-gradient(90deg, var(--accent), #c084fc, var(--accent));
+  background-size: 200% 100%;
+}
+
+@keyframes file-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+.spinner-icon {
+  animation: spin 0.8s linear infinite;
+}
+
 .file-icon {
   width: 36px; height: 36px;
   background: linear-gradient(135deg, #ef4444, #f97316);
@@ -384,6 +422,7 @@ header {
   display: flex; align-items: center; justify-content: center;
   font-size: 14px;
   flex-shrink: 0;
+  color: #fff;
 }
 
 .file-meta { flex: 1; min-width: 0; }
@@ -593,6 +632,7 @@ header {
   border-radius: 14px;
   display: flex; align-items: center; justify-content: center;
   font-size: 24px;
+  color: var(--green);
 }
 
 .result-title {
@@ -667,10 +707,10 @@ header {
   flex-shrink: 0;
 }
 
-.h-status-icon.completed { background: var(--green-dim); }
-.h-status-icon.processing { background: var(--amber-dim); }
-.h-status-icon.failed { background: var(--red-dim); }
-.h-status-icon.pending { background: var(--surface2); }
+.h-status-icon.completed { background: var(--green-dim); color: var(--green); }
+.h-status-icon.processing { background: var(--amber-dim); color: var(--amber); }
+.h-status-icon.failed { background: var(--red-dim); color: var(--red); }
+.h-status-icon.pending { background: var(--surface2); color: var(--text3); }
 
 .h-info { flex: 1; min-width: 0; }
 
@@ -766,7 +806,7 @@ header {
   <!-- Header -->
   <header>
     <div class="logo">
-      <div class="logo-icon">📄</div>
+      <div class="logo-icon"><i data-lucide="file-text" size="22"></i></div>
       <h1>PDF <span>Tradutor</span> Pro</h1>
     </div>
     <div class="status-pill">
@@ -778,10 +818,10 @@ header {
   <!-- Tabs -->
   <div class="tabs">
     <button class="tab-btn active" onclick="showTab('upload')" id="tab-upload">
-      ⬆ Novo Trabalho
+      <i data-lucide="upload" size="16"></i> Novo Trabalho
     </button>
     <button class="tab-btn" onclick="showTab('history')" id="tab-history">
-      🕘 Histórico
+      <i data-lucide="clock" size="16"></i> Histórico
     </button>
   </div>
 
@@ -791,7 +831,7 @@ header {
     <!-- Upload Card -->
     <div class="upload-card">
       <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <span class="drop-icon">☁</span>
+        <span class="drop-icon"><i data-lucide="cloud-upload" size="48"></i></span>
         <div class="drop-title">Arraste os seus PDFs aqui</div>
         <div class="drop-sub">ou clique para seleccionar ficheiros</div>
         <div class="drop-types">
@@ -805,23 +845,23 @@ header {
       <!-- Options -->
       <div class="options-grid">
         <div class="option-group">
-          <div class="option-label">&#127760; Idioma de Destino</div>
+          <div class="option-label"><i data-lucide="globe" size="12"></i> Idioma de Destino</div>
           <select class="option-select" id="targetLang">
             <option value="none">-- Converter apenas (sem traducao) --</option>
-            <option value="pt" selected>&#127477;&#127481; Portugues</option>
-            <option value="en">&#127468;&#127463; Ingles</option>
-            <option value="es">&#127466;&#127480; Espanhol</option>
-            <option value="fr">&#127467;&#127479; Frances</option>
-            <option value="de">&#127465;&#127466; Alemao</option>
-            <option value="it">&#127470;&#127481; Italiano</option>
-            <option value="zh-cn">&#127464;&#127475; Chines</option>
-            <option value="ar">&#127480;&#127462; Arabe</option>
-            <option value="ru">&#127479;&#127482; Russo</option>
-            <option value="ja">&#127471;&#127477; Japones</option>
+            <option value="pt" selected>Portugues</option>
+            <option value="en">Ingles</option>
+            <option value="es">Espanhol</option>
+            <option value="fr">Frances</option>
+            <option value="de">Alemao</option>
+            <option value="it">Italiano</option>
+            <option value="zh-cn">Chines</option>
+            <option value="ar">Arabe</option>
+            <option value="ru">Russo</option>
+            <option value="ja">Japones</option>
           </select>
         </div>
         <div class="option-group">
-          <div class="option-label">&#128247; Imagens e Logos</div>
+          <div class="option-label"><i data-lucide="image" size="12"></i> Imagens e Logos</div>
           <select class="option-select" id="imageMode">
             <option value="placeholder">[LOGOMARCA] [CARIMBO] marcadores</option>
             <option value="keep">Manter imagens originais</option>
@@ -878,7 +918,7 @@ header {
         <!-- Result Card -->
     <div class="result-card" id="resultCard">
       <div class="result-header">
-        <div class="result-icon">&#9989;</div>
+        <div class="result-icon"><i data-lucide="check-circle" size="28"></i></div>
         <div>
           <div class="result-title" id="resultTitle">Traducao Concluida!</div>
           <div class="result-sub" id="resultSub">Todos os documentos foram processados</div>
@@ -886,37 +926,27 @@ header {
       </div>
       <div class="result-actions">
         <button class="btn btn-download" id="btnDownloadAll" onclick="downloadAll()" style="display:none">
-          &#11015; Descarregar Tudo (ZIP)
+          <i data-lucide="download" size="16"></i> Descarregar Tudo (ZIP)
         </button>
         <div id="zipWaiting" style="font-size:13px;color:var(--amber);display:none;align-items:center;gap:8px">
           <span class="spinner" style="border-color:rgba(245,158,11,0.3);border-top-color:var(--amber)"></span>
           A preparar ZIP...
         </div>
         <button class="btn btn-secondary" onclick="newJob()">
-          + Novo Trabalho
+          <i data-lucide="plus" size="16"></i> Novo Trabalho
         </button>
       </div>
       <!-- Individual file downloads -->
       <div id="resultFileList" style="margin-top:20px;display:flex;flex-direction:column;gap:8px"></div>
     </div>
-      </div>
-      <div class="result-actions">
-        <button class="btn btn-download" id="btnDownloadAll" onclick="downloadAll()">
-          ⬇ Descarregar Tudo (ZIP)
-        </button>
-        <button class="btn btn-secondary" onclick="newJob()">
-          ＋ Novo Trabalho
-        </button>
-      </div>
-    </div>
 
     <!-- Action Bar -->
     <div class="action-bar" id="actionBar">
       <button class="btn btn-primary" id="btnProcess" onclick="startProcessing()" disabled>
-        ⚡ Processar PDFs
+        <i data-lucide="zap" size="18"></i> Processar PDFs
       </button>
       <button class="btn btn-ghost" onclick="clearFiles()">
-        🗑 Limpar
+        <i data-lucide="trash-2" size="16"></i> Limpar
       </button>
     </div>
 
@@ -925,8 +955,8 @@ header {
   <!-- ══ HISTORY TAB ══ -->
   <div id="panel-history" style="display:none">
     <div class="history-header">
-      <div class="section-title">🕘 Histórico de Trabalhos</div>
-      <button class="btn btn-secondary btn-sm" onclick="loadHistory()">↺ Actualizar</button>
+      <div class="section-title"><i data-lucide="clock" size="20"></i> Histórico de Trabalhos</div>
+      <button class="btn btn-secondary btn-sm" onclick="loadHistory()"><i data-lucide="refresh-cw" size="14"></i> Actualizar</button>
     </div>
     <div id="historyContent"></div>
   </div>
@@ -954,6 +984,7 @@ function showTab(tab) {
   document.getElementById('panel-upload').style.display = tab === 'upload' ? '' : 'none';
   document.getElementById('panel-history').style.display = tab === 'history' ? '' : 'none';
   if (tab === 'history') loadHistory();
+  lucide.createIcons();
 }
 
 // Drag & Drop
@@ -1000,17 +1031,19 @@ function renderFileList() {
   section.classList.add('visible');
   count.textContent = pendingFiles.length + (pendingFiles.length === 1 ? ' ficheiro' : ' ficheiros');
   list.innerHTML = pendingFiles.map(function(f, i) {
-    var icon = f.name.endsWith('.zip') ? '&#128230;' : '&#128196;';
+    var iconName = f.name.endsWith('.zip') ? 'file-archive' : 'file-text';
     return '<div class="file-item" id="pending-' + i + '">' +
-      '<div class="file-icon">' + icon + '</div>' +
+      '<div class="file-icon"><i data-lucide="' + iconName + '" size="18"></i></div>' +
       '<div class="file-meta">' +
         '<div class="file-name" title="' + f.name + '">' + f.name + '</div>' +
         '<div class="file-size">' + formatBytes(f.size) + '</div>' +
+        '<div class="file-progress"><div class="file-progress-bar"></div></div>' +
       '</div>' +
       '<div class="file-status pending">pendente</div>' +
-      '<button class="file-action" onclick="removeFile(' + i + ')" title="Remover">&#10005;</button>' +
+      '<button class="file-action" onclick="removeFile(' + i + ')" title="Remover"><i data-lucide="x" size="14"></i></button>' +
     '</div>';
   }).join('');
+  lucide.createIcons();
 }
 
 function removeFile(i) {
@@ -1071,7 +1104,7 @@ async function startProcessing() {
   } catch (err) {
     toast('Erro: ' + (err.message || 'Falha no envio'), 'error');
     btn.disabled = false;
-    btn.innerHTML = '&#9889; Processar PDFs';
+    btn.innerHTML = '<i data-lucide="zap" size="18"></i> Processar PDFs';
   }
 }
 
@@ -1083,15 +1116,17 @@ function renderUploadedFiles(files) {
   count.textContent = files.length + (files.length === 1 ? ' ficheiro' : ' ficheiros');
   list.innerHTML = files.map(function(f) {
     return '<div class="file-item" id="file-' + f.id + '">' +
-      '<div class="file-icon">&#128196;</div>' +
+      '<div class="file-icon"><i data-lucide="file-text" size="18"></i></div>' +
       '<div class="file-meta">' +
         '<div class="file-name" title="' + f.name + '">' + f.name + '</div>' +
         '<div class="file-size">' + formatBytes(f.size) + '</div>' +
+        '<div class="file-progress"><div class="file-progress-bar" id="prog-' + f.id + '"></div></div>' +
       '</div>' +
       '<div class="file-status pending" id="status-' + f.id + '">pendente</div>' +
       '<span id="action-' + f.id + '"></span>' +
     '</div>';
   }).join('');
+  lucide.createIcons();
 }
 
 // Polling
@@ -1143,9 +1178,26 @@ function updateFileStatuses(files) {
       statusEl.className   = 'file-status ' + f.status;
       statusEl.textContent = labels[f.status] || f.status;
     }
+    var progBar = document.getElementById('prog-' + f.id);
+    if (progBar) {
+      progBar.className = 'file-progress-bar';
+      if (f.status === 'completed') {
+        progBar.style.width = '100%';
+        progBar.classList.add('completed');
+      } else if (f.status === 'failed') {
+        progBar.style.width = '100%';
+        progBar.classList.add('failed');
+      } else if (f.status === 'processing') {
+        progBar.style.width = '';
+        progBar.classList.add('indeterminate');
+      } else {
+        progBar.style.width = '0%';
+      }
+    }
     if (actionEl && f.status === 'completed') {
       var dlUrl = API_BASE + '/api/download/' + currentJobId + '/file/' + f.id;
-      actionEl.innerHTML = '<a href="' + dlUrl + '" class="btn btn-secondary btn-sm" style="text-decoration:none" download>&#11015;</a>';
+      actionEl.innerHTML = '<a href="' + dlUrl + '" class="btn btn-secondary btn-sm" style="text-decoration:none" download><i data-lucide="download" size="14"></i></a>';
+      lucide.createIcons();
     }
   });
 }
@@ -1171,7 +1223,7 @@ function onJobComplete(job) {
         return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;' +
           'background:var(--red-dim);border:1px solid rgba(239,68,68,0.2);' +
           'border-radius:8px;font-size:13px">' +
-          '<span style="color:var(--red)">&#10060;</span>' +
+          '<span style="color:var(--red)"><i data-lucide="x-circle" size="18"></i></span>' +
           '<span style="flex:1;color:var(--text2)">' + f.name + '</span>' +
           '<span style="font-size:11px;color:var(--red)">' + (f.error || 'falhou') + '</span>' +
           '</div>';
@@ -1183,15 +1235,16 @@ function onJobComplete(job) {
       return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;' +
         'background:var(--green-dim);border:1px solid rgba(34,197,94,0.2);' +
         'border-radius:8px;font-size:13px">' +
-        '<span>&#128196;</span>' +
+        '<span><i data-lucide="file-text" size="18"></i></span>' +
         '<span style="flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"' +
           ' title="' + fname + '">' + fname + ptype + '</span>' +
         '<span style="font-size:11px;color:var(--text3);flex-shrink:0">' + chars + '</span>' +
         '<a href="' + dlUrl + '" download style="padding:5px 14px;background:var(--green);' +
           'color:#fff;border-radius:6px;text-decoration:none;font-size:12px;font-weight:500;flex-shrink:0">' +
-          '&#11015; DOCX</a>' +
+          '<i data-lucide="download" size="14"></i> DOCX</a>' +
         '</div>';
     }).join('');
+    lucide.createIcons();
   }
 
   toast(ok + ' documento(s) traduzido(s)!', 'success');
@@ -1213,7 +1266,7 @@ function onJobComplete(job) {
           return '<div style="display:flex;align-items:center;gap:12px;padding:8px 14px;' +
             'background:var(--green-dim);border:1px solid rgba(34,197,94,0.2);' +
             'border-radius:8px;font-size:12px;margin-top:4px">' +
-            '<span>&#128196;</span>' +
+            '<span><i data-lucide="file-text" size="16"></i></span>' +
             '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + f.name + '</span>' +
             '<span style="color:var(--text3)">' + f.size_kb + ' KB</span>' +
             '</div>';
@@ -1270,7 +1323,7 @@ async function loadHistory() {
     if (!jobs.length) {
       container.innerHTML =
         '<div class="history-empty">' +
-        '<div class="empty-icon">&#128237;</div>' +
+        '<div class="empty-icon"><i data-lucide="inbox" size="36"></i></div>' +
         '<div>Nenhum trabalho realizado ainda</div>' +
         '<div style="font-size:12px;margin-top:8px;color:var(--text3)">Faca upload de PDFs para comecar</div>' +
         '</div>';
@@ -1279,32 +1332,37 @@ async function loadHistory() {
     container.innerHTML = '<div class="history-list">' +
       jobs.map(function(job){ return historyCard(job); }).join('') +
       '</div>';
+    lucide.createIcons();
   } catch(e) {
     container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">Erro ao carregar historico</div>';
   }
 }
 
 function historyCard(job) {
-  var icons = { completed: '&#9989;', processing: '&#9203;', failed: '&#10060;', pending: '&#9208;' };
+  var iconMap = { completed: 'check-circle', processing: 'loader', failed: 'x-circle', pending: 'clock' };
   var date  = new Date(job.created_at).toLocaleString('pt-PT');
   var zipBtn = '';
   if (job.status === 'completed' && job.zip_path) {
     zipBtn = '<a href="' + API_BASE + '/api/download/' + job.job_id + '/zip" ' +
-      'class="btn btn-download btn-sm" style="text-decoration:none" download>&#11015; ZIP</a>';
+      'class="btn btn-download btn-sm" style="text-decoration:none" download><i data-lucide="download" size="14"></i> ZIP</a>';
   }
+  var statusIcon = iconMap[job.status] || 'file-text';
+  var isProcessing = job.status === 'processing';
   return '<div class="history-card">' +
-    '<div class="h-status-icon ' + job.status + '">' + (icons[job.status] || '&#128196;') + '</div>' +
+    '<div class="h-status-icon ' + job.status + '">' +
+      '<i data-lucide="' + statusIcon + '" size="20"' + (isProcessing ? ' class="spinner-icon"' : '') + '></i>' +
+    '</div>' +
     '<div class="h-info">' +
       '<div class="h-title">' + job.total + ' PDF(s) - ' + (job.target_language || 'pt').toUpperCase() + '</div>' +
       '<div class="h-meta">' +
-        '<span>&#128197; ' + date + '</span>' +
-        '<span>&#9989; ' + job.processed + '/' + job.total + '</span>' +
-        (job.failed ? '<span style="color:var(--red)">&#10060; ' + job.failed + ' falhados</span>' : '') +
-        '<span>&#128202; ' + job.percentage + '%</span>' +
+        '<span><i data-lucide="calendar" size="12"></i> ' + date + '</span>' +
+        '<span><i data-lucide="check-circle" size="12"></i> ' + job.processed + '/' + job.total + '</span>' +
+        (job.failed ? '<span style="color:var(--red)"><i data-lucide="x-circle" size="12"></i> ' + job.failed + ' falhados</span>' : '') +
+        '<span><i data-lucide="trending-up" size="12"></i> ' + job.percentage + '%</span>' +
       '</div>' +
     '</div>' +
     '<div class="h-actions">' + zipBtn +
-      '<button class="btn btn-ghost btn-sm" onclick="deleteJob(\'' + job.job_id + '\')">&#128465;</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="deleteJob(\'' + job.job_id + '\')"><i data-lucide="trash-2" size="14"></i></button>' +
     '</div>' +
     '</div>';
 }
@@ -1344,8 +1402,9 @@ function toast(msg, type) {
   type = type || 'info';
   var el  = document.createElement('div');
   el.className = 'toast ' + type;
-  var emojis = { success: '&#9989;', error: '&#10060;', info: 'ℹ' };
-  el.innerHTML = '<span>' + (emojis[type] || '') + '</span><span>' + msg + '</span>';
+  var iconMap = { success: 'check-circle', error: 'x-circle', info: 'info' };
+  el.innerHTML = '<span><i data-lucide="' + (iconMap[type] || 'info') + '" size="16"></i></span><span>' + msg + '</span>';
+  lucide.createIcons();
   document.getElementById('toastContainer').appendChild(el);
   setTimeout(function(){ el.remove(); }, 4000);
 }
@@ -1356,7 +1415,9 @@ function formatBytes(b) {
   return (b/1048576).toFixed(1) + ' MB';
 }
 
-// Init - check API health
+// Init
+lucide.createIcons();
+
 fetch(API_BASE + '/api/health')
   .then(function(r){ return r.json(); })
   .then(function(data) {
