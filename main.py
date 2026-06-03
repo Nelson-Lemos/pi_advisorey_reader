@@ -173,28 +173,39 @@ def translate_markdown(md_text: str, translator) -> str:
         logger.info("Translating large doc: %d blocks, %d chars total", total_blocks, len(md_text))
         translated_blocks = []
         for i, block in enumerate(blocks):
-            logger.info("Translating block %d/%d (%d chars)...", i+1, total_blocks, len(block))
+            label = f"block {i+1}/{total_blocks}"
+            logger.info("Translating %s (%d chars)...", label, len(block))
             try:
-                translated_blocks.append(_translate_markdown_block(block, translator))
+                translated_blocks.append(_translate_markdown_block(block, translator, label))
             except Exception as e:
-                logger.error("Block %d/%d failed: %s — keeping original", i+1, total_blocks, e)
+                logger.error("%s failed: %s — keeping original", label, e)
                 translated_blocks.append(block)
         return "\n\n".join(translated_blocks)
 
-    return _translate_markdown_block(md_text, translator)
+    return _translate_markdown_block(md_text, translator, "full")
 
 
-def _translate_markdown_block(md_text: str, translator) -> str:
+def _translate_markdown_block(md_text: str, translator, block_label: str = "") -> str:
     """Traduz um bloco de markdown preservando estrutura."""
     lines = md_text.split("\n")
     out, batch, code_block = [], [], False
+    total = len(md_text)
+    flushed = 0
+    last_pct = 0
 
     def flush():
+        nonlocal flushed, last_pct
         if not batch:
             return
         chunk = "\n".join(batch)
         out.extend(_translate_chunk(chunk, translator).split("\n"))
+        flushed += len(chunk)
         batch.clear()
+        if total:
+            pct = min(100, int(flushed / total * 100))
+            if pct >= last_pct + 10:
+                last_pct = (pct // 10) * 10
+                logger.info("Translation %s: %d%% (%d/%d chars)", block_label, pct, flushed, total)
 
     for line in lines:
         s = line.strip()
@@ -252,10 +263,10 @@ def get_translator(lang: str):
     if not lang or lang in ("none", "original", ""):
         return None
     try:
-        from nllb_translator import create_translator
+        from hf_translator import create_translator
         return create_translator(lang)
     except Exception as e:
-        logger.error("Falha ao criar tradutor NLLB: %s", e)
+        logger.error("Falha ao criar tradutor: %s", e)
         return None
 
 

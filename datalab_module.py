@@ -27,7 +27,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # ── Configuração ──────────────────────────────────────────────────────────────
-DATALAB_API_KEY  = os.environ.get("DATALAB_API_KEY", "wUPsGG53rk_SqbznrRfo8z_bvDyfv1KXVtlVUcMEmFU")
+DATALAB_API_KEY  = os.environ.get("DATALAB_API_KEY", "DAyXRgF5GOffBsh8j824AxZ2Cvhng-CLuKX99VmatU8")
 DATALAB_CONV_URL = "https://www.datalab.to/api/v1/convert"
 DATALAB_OCR_URL  = "https://www.datalab.to/api/v1/ocr"
 
@@ -98,14 +98,24 @@ def _translate_markdown(md_text: str, translator) -> str:
     out = []
     code_block = False
     batch = []
+    total = len(md_text)
+    flushed = 0
+    last_pct = 0
 
     def flush():
+        nonlocal flushed, last_pct
         if not batch:
             return
         chunk = "\n".join(batch)
         translated = _translate_chunk(chunk, translator)
         out.extend(translated.split("\n"))
+        flushed += len(chunk)
         batch.clear()
+        if total:
+            pct = min(100, int(flushed / total * 100))
+            if pct >= last_pct + 10:
+                last_pct = (pct // 10) * 10
+                logger.info("Translation progress: %d%% (%d/%d chars)", pct, flushed, total)
 
     for line in lines:
         stripped = line.strip()
@@ -189,14 +199,14 @@ def _translate_json_obj(obj, translator):
 
 
 def _get_translator(lang: str):
-    """Cria e devolve um NLLBTranslator para o idioma dado."""
+    """Cria e devolve um tradutor para o idioma dado (HF cloud ou NLLB local)."""
     if not lang or lang in ("none", "original", ""):
         return None
     try:
-        from nllb_translator import create_translator
+        from hf_translator import create_translator
         return create_translator(lang)
     except Exception as e:
-        logger.error("Erro ao criar tradutor NLLB: %s", e)
+        logger.error("Erro ao criar tradutor: %s", e)
         return None
 
 

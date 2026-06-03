@@ -1,0 +1,31 @@
+{
+  "job_id": "6371beda-549f-4849-aee2-28403f479df4",
+  "status": "completed",
+  "total": 1,
+  "processed": 0,
+  "failed": 1,
+  "percentage": 100.0,
+  "current_file": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+  "files": [
+    {
+      "id": "e3074fba-4298-4369-bb11-4e714868a73b",
+      "name": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "size": 28541283,
+      "type": "pdf",
+      "upload_path": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\uploads\\6371beda-549f-4849-aee2-28403f479df4\\1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "status": "failed",
+      "progress": 100,
+      "error": "No module named 'requests'"
+    }
+  ],
+  "created_at": "2026-06-03T15:22:44.450292",
+  "target_language": "pt",
+  "image_mode": "placeholder",
+  "engine": "datalab",
+  "datalab_mode": "accurate",
+  "datalab_output": "markdown",
+  "started_at": "2026-06-03T15:22:44.534916",
+  "zip_path": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\outputs\\6371beda-549f-4849-aee2-28403f479df4_all.zip",
+  "output_dir": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\outputs\\6371beda-549f-4849-aee2-28403f479df4",
+  "completed_at": "2026-06-03T15:22:44.563367"
+}

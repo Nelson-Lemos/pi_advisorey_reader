@@ -1,0 +1,27 @@
+{
+  "job_id": "7d6bdad6-757e-430f-b4dd-f43ddc3fe9fa",
+  "status": "processing",
+  "total": 1,
+  "processed": 0,
+  "failed": 0,
+  "percentage": 0.0,
+  "current_file": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+  "files": [
+    {
+      "id": "8735ddc7-2b81-4143-9328-e545801f29f1",
+      "name": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "size": 28541283,
+      "type": "pdf",
+      "upload_path": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\uploads\\7d6bdad6-757e-430f-b4dd-f43ddc3fe9fa\\1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "status": "processing",
+      "progress": 10
+    }
+  ],
+  "created_at": "2026-06-03T16:03:48.131558",
+  "target_language": "pt",
+  "image_mode": "placeholder",
+  "engine": "datalab",
+  "datalab_mode": "accurate",
+  "datalab_output": "markdown",
+  "started_at": "2026-06-03T16:03:48.216738"
+}

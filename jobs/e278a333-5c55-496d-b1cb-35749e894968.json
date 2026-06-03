@@ -1,0 +1,38 @@
+{
+  "job_id": "e278a333-5c55-496d-b1cb-35749e894968",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "current_file": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+  "files": [
+    {
+      "id": "212de09d-7f01-4507-8d9d-1912e151ba5d",
+      "name": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "size": 28541283,
+      "type": "pdf",
+      "upload_path": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\uploads\\e278a333-5c55-496d-b1cb-35749e894968\\1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "status": "completed",
+      "progress": 100,
+      "output_path": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\outputs\\e278a333-5c55-496d-b1cb-35749e894968\\1 Technical Part - Volume 1_parte_03_pp201-300_convertido.docx",
+      "output_name": "1 Technical Part - Volume 1_parte_03_pp201-300_convertido.docx",
+      "size_kb": 185.5,
+      "pdf_type": "scanned",
+      "chars_extracted": 490908,
+      "extraction_method": "datalab_marker",
+      "page_count": 100,
+      "quality_score": null
+    }
+  ],
+  "created_at": "2026-06-03T16:08:27.951297",
+  "target_language": "pt",
+  "image_mode": "placeholder",
+  "engine": "datalab",
+  "datalab_mode": "accurate",
+  "datalab_output": "markdown",
+  "started_at": "2026-06-03T16:08:28.017850",
+  "zip_path": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\outputs\\e278a333-5c55-496d-b1cb-35749e894968_all.zip",
+  "output_dir": "C:\\Users\\Jorge Paim\\Desktop\\pi_advisorey_reader\\outputs\\e278a333-5c55-496d-b1cb-35749e894968",
+  "completed_at": "2026-06-03T16:39:14.161289"
+}
