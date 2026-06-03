@@ -1,7 +1,10 @@
 fastapi
 uvicorn[standard]
 python-multipart
-deep-translator
+transformers
+torch
+sentencepiece
+accelerate
 pymupdf
 pdf2docx
 python-docx

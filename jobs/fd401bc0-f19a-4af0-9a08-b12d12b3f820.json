@@ -1,0 +1,27 @@
+{
+  "job_id": "fd401bc0-f19a-4af0-9a08-b12d12b3f820",
+  "status": "processing",
+  "total": 1,
+  "processed": 0,
+  "failed": 0,
+  "percentage": 0.0,
+  "current_file": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+  "files": [
+    {
+      "id": "bba66dad-9c91-4051-b578-52e9f2c0ec5b",
+      "name": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "size": 28541283,
+      "type": "pdf",
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\uploads\\fd401bc0-f19a-4af0-9a08-b12d12b3f820\\1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "status": "processing",
+      "progress": 10
+    }
+  ],
+  "created_at": "2026-06-03T15:05:21.516830",
+  "target_language": "none",
+  "image_mode": "placeholder",
+  "engine": "datalab",
+  "datalab_mode": "accurate",
+  "datalab_output": "markdown",
+  "started_at": "2026-06-03T15:05:21.678772"
+}

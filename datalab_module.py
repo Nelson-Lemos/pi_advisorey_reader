@@ -189,19 +189,14 @@ def _translate_json_obj(obj, translator):
 
 
 def _get_translator(lang: str):
-    """Cria e devolve um GoogleTranslator para o idioma dado."""
+    """Cria e devolve um NLLBTranslator para o idioma dado."""
     if not lang or lang in ("none", "original", ""):
         return None
     try:
-        from deep_translator import GoogleTranslator
-        t = GoogleTranslator(source="auto", target=lang)
-        logger.info("Tradutor pronto: auto → %s", lang)
-        return t
-    except ImportError:
-        logger.error("deep_translator não instalado — pip install deep-translator")
-        return None
+        from nllb_translator import create_translator
+        return create_translator(lang)
     except Exception as e:
-        logger.error("Erro ao criar tradutor: %s", e)
+        logger.error("Erro ao criar tradutor NLLB: %s", e)
         return None
 
 
