@@ -106,14 +106,14 @@ def list_jobs(limit=50):
     return out
 
 
-# ── Tradução com cache e retry ────────────────────────────────────────────────
+# ── Tradução com cache (NLLB-200 local) ─────────────────────────────────────────
 
-def _translate_chunk(text: str, translator, retry: int = 0) -> str:
-    """Traduz um chunk com cache + retry. Max 1500 chars por chamada (limite Google)."""
+def _translate_chunk(text: str, translator) -> str:
+    """Traduz um chunk com cache. Max 4000 chars por chamada (limite NLLB)."""
     if not text or not text.strip():
         return text
 
-    MAX_CHARS = 1500
+    MAX_CHARS = 4000
 
     # Split if too long
     if len(text) > MAX_CHARS:
@@ -124,29 +124,22 @@ def _translate_chunk(text: str, translator, retry: int = 0) -> str:
                 buf = (buf + " " + s).strip()
             else:
                 if buf:
-                    parts.append(_translate_chunk(buf, translator, retry))
+                    parts.append(_translate_chunk(buf, translator))
                 buf = s
         if buf:
-            parts.append(_translate_chunk(buf, translator, retry))
+            parts.append(_translate_chunk(buf, translator))
         return " ".join(parts)
 
     cached = _translation_cache.get(text)
     if cached:
         return cached
     try:
-        time.sleep(0.5)
         r = translator.translate(text)
         result = r.strip() if r else text
         _translation_cache[text] = result
         return result
     except Exception as e:
-        msg = str(e)
-        wait = min(5 * (retry + 1), 60)
-        logger.warning("translate error (retry %d): %s — waiting %ds", retry + 1, msg, wait)
-        time.sleep(wait)
-        if retry < 4:
-            return _translate_chunk(text, translator, retry + 1)
-        logger.error("Translation failed after %d retries, keeping original", retry + 1)
+        logger.error("Translation error: %s — keeping original", e)
         return text
 
 
@@ -259,15 +252,10 @@ def get_translator(lang: str):
     if not lang or lang in ("none", "original", ""):
         return None
     try:
-        from deep_translator import GoogleTranslator
-        t = GoogleTranslator(source="auto", target=lang)
-        logger.info("Translator ready: auto → %s", lang)
-        return t
-    except ImportError:
-        logger.error("deep_translator not installed — pip install deep-translator")
-        return None
+        from nllb_translator import create_translator
+        return create_translator(lang)
     except Exception as e:
-        logger.error("Failed to create translator: %s", e)
+        logger.error("Falha ao criar tradutor NLLB: %s", e)
         return None
 
 
@@ -854,7 +842,7 @@ async def health():
     deps = {}
     checks = [
         ("marker",         "Marker local"),
-        ("deep_translator","deep-translator"),
+        ("transformers",   "transformers (NLLB)"),
         ("docx",           "python-docx"),
         ("fitz",           "PyMuPDF"),
         ("pdf2docx",       "pdf2docx"),
