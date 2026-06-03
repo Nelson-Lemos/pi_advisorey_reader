@@ -1,0 +1,38 @@
+{
+  "job_id": "38911908-a1f3-4bc0-ac9c-7d443189336e",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "current_file": "1 Techincal new.pdf",
+  "files": [
+    {
+      "id": "25bd6bb5-4faf-4b71-a1b9-a4e83d77e43f",
+      "name": "1 Techincal new.pdf",
+      "size": 418456,
+      "type": "pdf",
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\uploads\\38911908-a1f3-4bc0-ac9c-7d443189336e\\1 Techincal new.pdf",
+      "status": "completed",
+      "progress": 100,
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\38911908-a1f3-4bc0-ac9c-7d443189336e\\1 Techincal new_convertido.docx",
+      "output_name": "1 Techincal new_convertido.docx",
+      "size_kb": 52.4,
+      "pdf_type": "scanned",
+      "chars_extracted": 39074,
+      "extraction_method": "datalab_marker",
+      "page_count": 13,
+      "quality_score": null
+    }
+  ],
+  "created_at": "2026-06-03T13:54:19.879028",
+  "target_language": "none",
+  "image_mode": "placeholder",
+  "engine": "datalab",
+  "datalab_mode": "balanced",
+  "datalab_output": "markdown",
+  "started_at": "2026-06-03T13:54:20.002550",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\38911908-a1f3-4bc0-ac9c-7d443189336e_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\38911908-a1f3-4bc0-ac9c-7d443189336e",
+  "completed_at": "2026-06-03T13:54:39.343672"
+}

@@ -27,7 +27,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # ── Configuração ──────────────────────────────────────────────────────────────
-DATALAB_API_KEY  = os.environ.get("DATALAB_API_KEY", "nyeSwMeyBnFJAvcL0zrp_EJl4LgSVIw6V3ZHMFqniZM")
+DATALAB_API_KEY  = os.environ.get("DATALAB_API_KEY", "wUPsGG53rk_SqbznrRfo8z_bvDyfv1KXVtlVUcMEmFU")
 DATALAB_CONV_URL = "https://www.datalab.to/api/v1/convert"
 DATALAB_OCR_URL  = "https://www.datalab.to/api/v1/ocr"
 
@@ -252,12 +252,11 @@ def convert_with_datalab(
     compatível com o formato esperado pelo main.py do Marker local.
     """
     import requests
-
     key = (api_key or DATALAB_API_KEY).strip()
     if not key:
         raise ValueError(
             "Chave API Datalab não configurada. "
-            "Defina DATALAB_API_KEY ou passe api_key=..."
+            "Defina DATALAB_API_KEY ou passe api_key..."
         )
 
     headers  = {"X-API-Key": key}
@@ -265,39 +264,55 @@ def convert_with_datalab(
     mime     = MIME_MAP.get(ext, "application/octet-stream")
     is_image = ext in IMAGE_EXTS
 
-    # ── 1. Submissão ──────────────────────────────────────────────────────────
-    if is_image:
-        # Endpoint OCR dedicado para imagens
-        logger.info("Datalab OCR: a enviar imagem %s", src_path.name)
-        with open(str(src_path), "rb") as f:
-            resp = requests.post(
-                DATALAB_OCR_URL,
-                files={"file": (src_path.name, f, mime)},
-                data={"langs": "auto"},
-                headers=headers,
-                timeout=60,
-            )
-        label = "OCR"
-    else:
-        # Endpoint Marker para PDFs e documentos Office
-        logger.info("Datalab Marker: a enviar %s (mode=%s, format=%s, force_ocr=true)",
-                    src_path.name, mode, output_format)
-        with open(str(src_path), "rb") as f:
-            resp = requests.post(
-                DATALAB_CONV_URL,
-                files={"file": (src_path.name, f, mime)},
-                data={
-                    "output_format": output_format,
-                    "mode": mode,
-                    "force_ocr": "true",          # <-- força OCR em PDFs escaneados
-                    "disable_image_extraction": "false",
-                },
-                headers=headers,
-                timeout=60,
-            )
-        label = "Marker"
+    session = requests.Session()
 
-    resp.raise_for_status()
+    def _post_file(url, files, data=None):
+        return session.post(
+            url,
+            files=files,
+            data=data,
+            headers=headers,
+            timeout=(60, 3600),
+        )
+
+    # ── 1. Submissão ──────────────────────────────────────────────────────────
+    max_attempts = 5
+    for attempt in range(max_attempts):
+        try:
+            if is_image:
+                logger.info("Datalab OCR: a enviar imagem %s (attempt %d)", src_path.name, attempt + 1)
+                with open(str(src_path), "rb") as f:
+                    resp = _post_file(
+                        DATALAB_OCR_URL,
+                        files={"file": (src_path.name, f, mime)},
+                        data={"langs": "auto"},
+                    )
+                label = "OCR"
+            else:
+                logger.info("Datalab Marker: a enviar %s (mode=%s, format=%s, force_ocr=true, attempt=%d)",
+                            src_path.name, mode, output_format, attempt + 1)
+                with open(str(src_path), "rb") as f:
+                    resp = _post_file(
+                        DATALAB_CONV_URL,
+                        files={"file": (src_path.name, f, mime)},
+                        data={
+                            "output_format": output_format,
+                            "mode": mode,
+                            "force_ocr": "true",          # <-- força OCR em PDFs escaneados
+                            "disable_image_extraction": "false",
+                        },
+                    )
+                label = "Marker"
+
+            resp.raise_for_status()
+            break
+        except Exception as e:
+            wait = 10 * (attempt + 1)
+            logger.warning("Datalab submission attempt %d failed: %s — waiting %ds", attempt + 1, e, wait)
+            if attempt == max_attempts - 1:
+                raise
+            time.sleep(wait)
+
     data = resp.json()
     if not data.get("success"):
         raise RuntimeError(f"Datalab {label} submissão falhou: {data.get('error', data)}")

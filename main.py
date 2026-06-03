@@ -75,7 +75,7 @@ class ProcessRequest(BaseModel):
     image_mode:      str  = "placeholder"   # placeholder | keep | remove
     remove_images:   bool = False
     engine:          str  = "datalab"        # datalab | marker
-    datalab_mode:    str  = "balanced"       # fast | balanced | accurate
+    datalab_mode:    str  = "accurate"       # fast | balanced | 
     datalab_output:  str  = "markdown"       # markdown | html | json
 
 
@@ -290,6 +290,88 @@ def _datalab_poll(check_url: str, headers: dict, label: str, max_minutes=12) -> 
     raise TimeoutError(f"Datalab {label}: timeout after {max_minutes} min")
 
 
+# ── Cache de classificação de imagens ──────────────────────────────────────────
+_classification_cache: dict = {}
+
+def classify_image(img_bytes: bytes, img_filename: str, headers: dict,
+                   block_metadata: dict = None) -> str:
+    """
+    Classifica uma imagem como carimbo, assinatura, logo_marca ou normal.
+    Usa new_block_types (se disponível) ou OCR Datalab como fallback.
+    """
+    cache_key = f"{img_filename}:{len(img_bytes)}"
+    if cache_key in _classification_cache:
+        return _classification_cache[cache_key]
+
+    if block_metadata and isinstance(block_metadata, dict):
+        for key in (img_filename, img_filename.split("/")[-1],
+                     img_filename.split("\\")[-1]):
+            bt = block_metadata.get(key) or block_metadata.get("all", {}).get(key)
+            if bt:
+                bt_lower = bt.lower()
+                if bt_lower in ("stamp", "carimbo", "rubber_stamp"):
+                    _classification_cache[cache_key] = "carimbo"
+                    return "carimbo"
+                if bt_lower in ("logo", "logotipo", "logo_marca", "watermark"):
+                    _classification_cache[cache_key] = "logo_marca"
+                    return "logo_marca"
+                if bt_lower in ("signature", "assinatura", "rubrica", "handwritten"):
+                    _classification_cache[cache_key] = "assinatura"
+                    return "assinatura"
+                if bt_lower in ("figure", "picture", "image", "photo", "illustration",
+                                "diagram", "chart", "graphic"):
+                    _classification_cache[cache_key] = "normal"
+                    return "normal"
+                break
+
+    # Fallback: OCR via endpoint Datalab
+    try:
+        import io, requests
+        files = {"file": (img_filename, io.BytesIO(img_bytes), "image/png")}
+        resp = requests.post(
+            DATALAB_OCR_URL,
+            files=files,
+            data={"langs": "auto"},
+            headers=headers,
+            timeout=(30, 120),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        text_parts = []
+        for page in data.get("pages", []):
+            for block in page.get("text_lines", []):
+                t = block.get("text", "").strip()
+                if t:
+                    text_parts.append(t)
+        ocr_text = " ".join(text_parts).lower()
+
+        if re.search(r"\d{2}[/\-\.]\d{2}[/\-\.]\d{2,4}", ocr_text) or \
+           any(w in ocr_text for w in ["carimbo", "selo", "certifico", "certificamos",
+                "republica", "ministerio", "governo", "oficial", "autentic",
+                "conferido", "valido", "protocolo"]):
+            _classification_cache[cache_key] = "carimbo"
+            return "carimbo"
+
+        if any(w in ocr_text for w in ["assinatura", "assinado", "assinante",
+                "firma", "rubrica", "nome"]):
+            _classification_cache[cache_key] = "assinatura"
+            return "assinatura"
+
+        if any(w in ocr_text for w in ["logo", "logotipo", "marca", "corporation",
+                "inc", "ltd", "ltda", "company", "enterprise", "group"]):
+            _classification_cache[cache_key] = "logo_marca"
+            return "logo_marca"
+
+        _classification_cache[cache_key] = "normal"
+        return "normal"
+
+    except Exception as e:
+        logger.warning("Falha ao classificar %s via OCR: %s — mantendo como normal",
+                       img_filename, e)
+        _classification_cache[cache_key] = "normal"
+        return "normal"
+
+
 # ── Motor 1: Datalab API ──────────────────────────────────────────────────────
 
 def convert_with_datalab(src_path: Path, out_path: Path,
@@ -313,35 +395,44 @@ def convert_with_datalab(src_path: Path, out_path: Path,
     mime    = MIME_MAP.get(ext, "application/octet-stream")
     is_img  = ext in IMAGE_EXTS
 
+    session = requests.Session()
+
+    def _post_file(url, files, data=None):
+        return session.post(
+            url,
+            files=files,
+            data=data,
+            headers=headers,
+            timeout=(60, 3600),
+        )
+
     # ── Submissão com retry automático ───────────────────────────────────────
     def _submit(attempt=0):
         with open(str(src_path), "rb") as f:
             if is_img:
-                r = requests.post(
+                return _post_file(
                     DATALAB_OCR_URL,
                     files={"file": (src_path.name, f, mime)},
                     data={"langs": "auto"},
-                    headers=headers,
-                    timeout=None,  # (connect, read) — 5 min para upload
-                )
-                return r, "OCR"
-            else:
-                r = requests.post(
-                    DATALAB_CONV_URL,
-                    files={"file": (src_path.name, f, mime)},
-                    data={
-                        "output_format":          output_format,
-                        "mode":                   mode,
-                        "force_ocr":              "true",
-                        "disable_image_extraction": "false",
-                    },
-                    headers=headers,
-                    timeout=None,  # (connect, read) — 5 min para upload
-                )
-                return r, "Marker"
+                ), "OCR"
+            extra_data = {}
+            if image_mode == "keep":
+                extra_data["extras"] = "new_block_types"
+            return _post_file(
+                DATALAB_CONV_URL,
+                files={"file": (src_path.name, f, mime)},
+                data={
+                    "output_format":           output_format,
+                    "mode":                    mode,
+                    "force_ocr":               "true",
+                    "disable_image_extraction": "false",
+                    **extra_data,
+                },
+            ), "Marker"
 
     resp, label = None, "Marker"
-    for attempt in range(3):
+    max_attempts = 5
+    for attempt in range(max_attempts):
         try:
             if is_img:
                 logger.info("Datalab OCR: %s (attempt %d)", src_path.name, attempt + 1)
@@ -354,9 +445,9 @@ def convert_with_datalab(src_path: Path, out_path: Path,
         except Exception as e:
             wait = 10 * (attempt + 1)
             logger.warning("Upload attempt %d failed: %s — waiting %ds", attempt + 1, e, wait)
-            time.sleep(wait)
-            if attempt == 2:
+            if attempt == max_attempts - 1:
                 raise
+            time.sleep(wait)
 
     data = resp.json()
     if not data.get("success"):
@@ -368,6 +459,27 @@ def convert_with_datalab(src_path: Path, out_path: Path,
     pages  = result.get("page_count", "?")
     score  = result.get("parse_quality_score", "?")
     logger.info("Datalab %s: complete — %s pages, quality=%s", label, pages, score)
+
+    # ── Extrair metadados de blocos (new_block_types) ─────────────────────────
+    block_metadata = {}
+    if image_mode == "keep":
+        for candidate in ("block_types", "blocks", "metadata", "block_metadata"):
+            raw = result.get(candidate, {})
+            if raw:
+                if isinstance(raw, dict):
+                    block_metadata = raw
+                elif isinstance(raw, str):
+                    try:
+                        import json as _json
+                        block_metadata = _json.loads(raw)
+                    except Exception:
+                        pass
+                break
+        if not block_metadata and "json" in result:
+            json_data = result.get("json", {})
+            if isinstance(json_data, dict):
+                block_metadata = json_data.get("block_types", {}) or \
+                                 json_data.get("blocks", {}) or block_metadata
 
     # ── Extracção de texto ────────────────────────────────────────────────────
     if is_img:
@@ -394,6 +506,16 @@ def convert_with_datalab(src_path: Path, out_path: Path,
 
     # ── Tratamento de imagens no markdown ─────────────────────────────────────
     images = result.get("images", {})
+
+    # Construir dicionário de bytes de imagem antecipadamente para classificação
+    img_dict_bytes = {}
+    if images:
+        for img_name, img_b64 in images.items():
+            try:
+                img_dict_bytes[img_name] = base64.b64decode(img_b64)
+            except Exception:
+                pass
+
     if output_format == "markdown" and not is_img:
         if image_mode == "remove":
             text_content = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", text_content)
@@ -403,6 +525,47 @@ def convert_with_datalab(src_path: Path, out_path: Path,
                 lambda m: f"[{m.group(1) or 'IMAGEM'}]",
                 text_content
             )
+        elif image_mode == "keep" and img_dict_bytes:
+            # Classificar cada imagem e substituir carimbos/assinaturas/logos
+            classifications = {}
+            for img_key, img_bytes_val in img_dict_bytes.items():
+                classifications[img_key] = classify_image(
+                    img_bytes_val, img_key, headers, block_metadata
+                )
+            normal_img_keys = {k for k, v in classifications.items() if v == "normal"}
+
+            # Substituir no markdown imagens classificadas como especiais
+            def _replace_classified(match):
+                alt = match.group(1)
+                img_path = match.group(2)
+                img_key = next(
+                    (k for k in classifications
+                     if k.endswith(img_path) or img_path in k),
+                    None
+                )
+                if img_key:
+                    cls = classifications.get(img_key, "normal")
+                    if cls == "carimbo":
+                        return "[carimbo]"
+                    if cls == "assinatura":
+                        return "[assinatura]"
+                    if cls == "logo_marca":
+                        return "[logo marca]"
+                return match.group(0)
+
+            text_content = re.sub(
+                r"!\[([^\]]*)\]\(([^)]+)\)",
+                _replace_classified,
+                text_content
+            )
+            logger.info(
+                "Datalab: %d/%d imagens classificadas como normais",
+                len(normal_img_keys), len(img_dict_bytes)
+            )
+
+            # Filtrar img_dict_bytes para conter apenas imagens normais
+            img_dict_bytes = {k: v for k, v in img_dict_bytes.items()
+                              if k in normal_img_keys}
 
     # ── Tradução ──────────────────────────────────────────────────────────────
     if do_translate and lang not in ("", "none", "original"):
@@ -420,20 +583,13 @@ def convert_with_datalab(src_path: Path, out_path: Path,
                 text_content = translate_markdown(text_content, translator)
             logger.info("Datalab: translation complete")
 
-    # ── Guardar imagens base64 ────────────────────────────────────────────────
-    img_dict_bytes = {}
-    if images:
-        for img_name, img_b64 in images.items():
-            try:
-                img_dict_bytes[img_name] = base64.b64decode(img_b64)
-            except Exception:
-                pass
-        if image_mode == "keep":
-            img_dir = out_path.parent / (out_path.stem + "_images")
-            img_dir.mkdir(exist_ok=True)
-            for img_name, img_bytes in img_dict_bytes.items():
-                (img_dir / img_name).write_bytes(img_bytes)
-            logger.info("Datalab: saved %d images", len(img_dict_bytes))
+    # ── Guardar imagens normais em disco (apenas modo keep) ───────────────────
+    if image_mode == "keep" and img_dict_bytes:
+        img_dir = out_path.parent / (out_path.stem + "_images")
+        img_dir.mkdir(exist_ok=True)
+        for img_name, img_bytes in img_dict_bytes.items():
+            (img_dir / img_name).write_bytes(img_bytes)
+        logger.info("Datalab: saved %d normal images to disk", len(img_dict_bytes))
 
     # ── Converter markdown → DOCX ─────────────────────────────────────────────
     saved_as_docx = False

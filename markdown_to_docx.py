@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-markdown_to_docx.py  v3.0  —  Fidelidade máxima ao documento original
-======================================================================
-Converte o output Markdown do Datalab para DOCX preservando:
-- Tabelas financeiras com todas as colunas e linhas
-- Negrito real (não asteriscos visíveis)
-- Títulos hierárquicos
-- Listas, citações, separadores
-- Remove ruído OCR (carimbos, descrições de imagens)
-- Sem asteriscos ou símbolos markdown visíveis no output final
+markdown_to_docx.py  v2.0
+Converte Markdown (output do Datalab/Marker) para DOCX bem formatado.
+- Limpa tags HTML residuais
+- Tabelas com cabeçalho colorido e linhas alternadas
+- Títulos hierárquicos com espaçamento
+- Listas, citações, código, hiperligações, imagens
 """
 
 import re
@@ -22,428 +19,436 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 
-# ── Filtros de ruído OCR ──────────────────────────────────────────────────────
+# ── Limpeza de HTML residual ──────────────────────────────────────────────────
 
-STAMP_PATTERNS = [
-    re.compile(r'^\s*\[(?:Circular|circular|Faint|faint|A circular|Three circular|Two circular|Logo|logo|A blank|This image|An image|Image of|Photo|Picture)[^\]]*\]\s*$', re.IGNORECASE),
-    re.compile(r'^\s*(?:Circular|circular|Faint|faint) stamp of\b', re.IGNORECASE),
-    re.compile(r'^\s*A (?:circular|faint|blue|red|black|green) (?:ink |blue )?stamp\b', re.IGNORECASE),
-    re.compile(r'^\s*(?:Three|Two|A) circular (?:blue|red|black) ink stamps?\b', re.IGNORECASE),
-    re.compile(r'^\s*(?:Logo of|This image shows|An image of|Photo of|Picture of)\b', re.IGNORECASE),
-    re.compile(r'^\s*A blank,?\s+aged\b', re.IGNORECASE),
-    re.compile(r'^\s*\[?(?:stamp|seal|logo|emblem|signature)\b[^\]]*\]?\s*$', re.IGNORECASE),
-]
-
-def _is_noise_line(line):
-    s = line.strip()
-    if not s:
-        return False
-    for pat in STAMP_PATTERNS:
-        if pat.match(s):
-            return True
-    return False
-
-
-def _clean_markdown(text):
-    """Remove noise, fix HTML entities, normalise whitespace."""
-    # HTML comments
-    text = re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
-    # HTML entities
-    text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>') \
-               .replace('&nbsp;', ' ').replace('&quot;', '"').replace('&#39;', "'") \
-               .replace('&apos;', "'").replace('&ldquo;', '"').replace('&rdquo;', '"') \
-               .replace('&lsquo;', "'").replace('&rsquo;', "'").replace('&mdash;', '—') \
-               .replace('&ndash;', '–').replace('&hellip;', '…')
-    # <br> → newline
-    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
-    # <sup>/<sub> — keep text, remove tags
-    text = re.sub(r'<su[pb][^>]*>(.*?)</su[pb]>', r'\1', text, flags=re.IGNORECASE | re.DOTALL)
-    # Remove remaining HTML tags
-    text = re.sub(r'<[^>]+>', '', text)
-    # Filter noise lines (stamps, image descriptions)
-    lines = text.split('\n')
-    lines = [l for l in lines if not _is_noise_line(l)]
-    text = '\n'.join(lines)
-    # Collapse 3+ blank lines → 2
-    text = re.sub(r'\n{4,}', '\n\n\n', text)
+def _clean_html(text: str) -> str:
+    """Remove tags HTML residuais do texto (comuns no output do Datalab)."""
+    # Substituir entidades HTML comuns
+    text = text.replace("&amp;",  "&")
+    text = text.replace("&lt;",   "<")
+    text = text.replace("&gt;",   ">")
+    text = text.replace("&nbsp;", " ")
+    text = text.replace("&quot;", '"')
+    text = text.replace("&#39;",  "'")
+    text = text.replace("&apos;", "'")
+    # Remover tags <br>, <br/>, <hr>
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<hr\s*/?>", "\n---\n", text, flags=re.IGNORECASE)
+    # Converter <b>/<strong> → **bold**
+    text = re.sub(r"<(?:b|strong)>(.*?)</(?:b|strong)>", r"**\1**", text, flags=re.IGNORECASE | re.DOTALL)
+    # Converter <i>/<em> → *italic*
+    text = re.sub(r"<(?:i|em)>(.*?)</(?:i|em)>", r"*\1*", text, flags=re.IGNORECASE | re.DOTALL)
+    # Converter <code> → `code`
+    text = re.sub(r"<code>(.*?)</code>", r"`\1`", text, flags=re.IGNORECASE | re.DOTALL)
+    # Remover todas as outras tags HTML
+    text = re.sub(r"<[^>]+>", "", text)
+    # Limpar espaços múltiplos (mas não newlines)
+    text = re.sub(r"[ \t]{2,}", " ", text)
     return text.strip()
 
 
-# ── XML helpers ───────────────────────────────────────────────────────────────
+# ── Helpers XML ───────────────────────────────────────────────────────────────
 
-def _cell_bg(cell, hex_color):
-    shd = OxmlElement('w:shd')
-    shd.set(qn('w:fill'), hex_color)
-    shd.set(qn('w:val'), 'clear')
-    shd.set(qn('w:color'), 'auto')
+def _set_cell_bg(cell, color_hex: str):
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:fill"),  color_hex)
+    shd.set(qn("w:val"),   "clear")
+    shd.set(qn("w:color"), "auto")
     cell._tc.get_or_add_tcPr().append(shd)
 
 
-def _cell_borders(cell, color='AAAAAA'):
-    tcPr = cell._tc.get_or_add_tcPr()
-    tcBorders = OxmlElement('w:tcBorders')
-    for side in ('top', 'left', 'bottom', 'right'):
-        b = OxmlElement(f'w:{side}')
-        b.set(qn('w:val'), 'single')
-        b.set(qn('w:sz'), '4')
-        b.set(qn('w:space'), '0')
-        b.set(qn('w:color'), color)
-        tcBorders.append(b)
+def _set_cell_border(cell, color_hex="CCCCCC"):
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    tcBorders = OxmlElement("w:tcBorders")
+    for side in ("top", "left", "bottom", "right"):
+        border = OxmlElement(f"w:{side}")
+        border.set(qn("w:val"),   "single")
+        border.set(qn("w:sz"),    "4")
+        border.set(qn("w:space"), "0")
+        border.set(qn("w:color"), color_hex)
+        tcBorders.append(border)
     tcPr.append(tcBorders)
 
 
-def _add_hyperlink(paragraph, text, url):
-    try:
-        r_id = paragraph.part.relate_to(
-            url,
-            'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
-            is_external=True)
-        hl = OxmlElement('w:hyperlink')
-        hl.set(qn('r:id'), r_id)
-        r = OxmlElement('w:r')
-        rPr = OxmlElement('w:rPr')
-        c = OxmlElement('w:color'); c.set(qn('w:val'), '0563C1'); rPr.append(c)
-        u = OxmlElement('w:u'); u.set(qn('w:val'), 'single'); rPr.append(u)
-        r.append(rPr)
-        t = OxmlElement('w:t'); t.text = text; r.append(t)
-        hl.append(r)
-        paragraph._p.append(hl)
-    except Exception:
-        paragraph.add_run(text)
+def _add_hyperlink(paragraph, text: str, url: str):
+    part = paragraph.part
+    r_id = part.relate_to(
+        url,
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        is_external=True
+    )
+    hl = OxmlElement("w:hyperlink")
+    hl.set(qn("r:id"), r_id)
+    r = OxmlElement("w:r")
+    rPr = OxmlElement("w:rPr")
+    color = OxmlElement("w:color"); color.set(qn("w:val"), "0563C1"); rPr.append(color)
+    u = OxmlElement("w:u"); u.set(qn("w:val"), "single"); rPr.append(u)
+    r.append(rPr)
+    t = OxmlElement("w:t"); t.text = text; r.append(t)
+    hl.append(r)
+    paragraph._p.append(hl)
 
 
-def _para_spacing(para, before=0, after=3):
+def _set_para_spacing(para, before=0, after=4):
     para.paragraph_format.space_before = Pt(before)
-    para.paragraph_format.space_after = Pt(after)
+    para.paragraph_format.space_after  = Pt(after)
 
 
 # ── Inline formatting ─────────────────────────────────────────────────────────
 
-def _add_inline(text, paragraph, size=11):
-    """Parse **bold**, *italic*, `code`, [link](url) and plain text."""
-    # Clean text first
-    text = re.sub(r'<[^>]+>', '', text)
-    pat = re.compile(
-        r'\[([^\]]+)\]\(([^)]+)\)'        # [text](url)
-        r'|\*\*\*(.+?)\*\*\*'             # ***bold italic***
-        r'|\*\*(.+?)\*\*'                 # **bold**
-        r'|\*(.+?)\*'                     # *italic*
-        r'|`([^`]+)`'                     # `code`
+def _parse_inline(text: str, paragraph, font_size=11):
+    """Aplica formatação inline: bold, italic, code, hiperligações, placeholders."""
+    text = _clean_html(text)
+    pattern = re.compile(
+        r"\[(carimbo|assinatura|logo\s*marca)\]"  # special placeholders
+        r"|\[([^\]]+)\]\(([^)]+)\)"               # [text](url)
+        r"|(?<!\*)\*\*(.+?)\*\*(?!\*)"            # **bold**
+        r"|\*\*\*(.+?)\*\*\*"                     # ***bold italic***
+        r"|(?<!\*)\*(.+?)\*(?!\*)"                # *italic*
+        r"|`([^`]+)`"                             # `code`
     )
     pos = 0
-    for m in pat.finditer(text):
+    for m in pattern.finditer(text):
         if m.start() > pos:
             run = paragraph.add_run(text[pos:m.start()])
-            run.font.size = Pt(size)
+            run.font.size = Pt(font_size)
         pos = m.end()
-        if m.group(1) and m.group(2):
-            _add_hyperlink(paragraph, m.group(1), m.group(2))
-        elif m.group(3):
-            r = paragraph.add_run(m.group(3))
-            r.bold = True; r.italic = True; r.font.size = Pt(size)
-        elif m.group(4):
-            r = paragraph.add_run(m.group(4))
-            r.bold = True; r.font.size = Pt(size)
-        elif m.group(5):
-            r = paragraph.add_run(m.group(5))
-            r.italic = True; r.font.size = Pt(size)
-        elif m.group(6):
-            r = paragraph.add_run(m.group(6))
-            r.font.name = 'Courier New'; r.font.size = Pt(9)
-            r.font.color.rgb = RGBColor(0xC7, 0x25, 0x4E)
+        if m.group(1):                              # placeholder classificado
+            ptype = m.group(1)
+            lbl = f"[{ptype}]"
+            run = paragraph.add_run(lbl)
+            run.bold = True
+            run.font.size = Pt(font_size)
+            if ptype == "carimbo":
+                run.font.color.rgb = RGBColor(0xC0, 0x39, 0x2B)
+            elif ptype == "assinatura":
+                run.font.color.rgb = RGBColor(0x2E, 0x86, 0xC1)
+            elif "marca" in ptype or ptype == "logo":
+                run.font.color.rgb = RGBColor(0x6C, 0x6C, 0x6C)
+        elif m.group(2) and m.group(3):             # hyperlink
+            _add_hyperlink(paragraph, m.group(2), m.group(3))
+        elif m.group(4):                            # bold
+            run = paragraph.add_run(m.group(4))
+            run.bold = True; run.font.size = Pt(font_size)
+        elif m.group(5):                            # bold italic
+            run = paragraph.add_run(m.group(5))
+            run.bold = True; run.italic = True; run.font.size = Pt(font_size)
+        elif m.group(6):                            # italic
+            run = paragraph.add_run(m.group(6))
+            run.italic = True; run.font.size = Pt(font_size)
+        elif m.group(7):                            # code
+            run = paragraph.add_run(m.group(7))
+            run.font.name  = "Courier New"
+            run.font.size  = Pt(10)
+            run.font.color.rgb = RGBColor(0xC7, 0x25, 0x4E)
     if pos < len(text):
         run = paragraph.add_run(text[pos:])
-        run.font.size = Pt(size)
+        run.font.size = Pt(font_size)
 
 
-# ── Table renderer ────────────────────────────────────────────────────────────
+# ── Table parser ──────────────────────────────────────────────────────────────
 
-def _parse_table(doc, lines, start):
-    """Render a markdown table into a Word table. Returns lines consumed."""
-    header_raw = lines[start].strip()
-    sep = lines[start + 1].strip() if start + 1 < len(lines) else ''
-    if not re.match(r'^[\s|:\-]+$', sep):
-        return 0
+def _parse_table(doc: Document, lines: list, i: int) -> int:
+    """Renderiza uma tabela markdown com cabeçalho, bordas e linhas alternadas."""
+    header_line = _clean_html(lines[i].strip())
+    sep_line    = lines[i + 1].strip() if i + 1 < len(lines) else ""
 
-    def split_cells(row):
-        cells = row.split('|')
-        # Remove leading/trailing empty from | at start/end
-        if cells and cells[0].strip() == '':
-            cells = cells[1:]
-        if cells and cells[-1].strip() == '':
-            cells = cells[:-1]
-        return [c.strip() for c in cells]
-
-    headers = split_cells(header_raw)
-    ncols = len(headers)
-    if ncols == 0:
+    if not re.match(r"^[\s|:\-]+$", sep_line):
         return 0
 
     # Parse alignment from separator
-    align = []
-    for c in split_cells(sep):
-        if c.startswith(':') and c.endswith(':'):
-            align.append(WD_ALIGN_PARAGRAPH.CENTER)
-        elif c.endswith(':'):
-            align.append(WD_ALIGN_PARAGRAPH.RIGHT)
+    col_aligns = []
+    for cell in sep_line.split("|"):
+        c = cell.strip()
+        if c.startswith(":") and c.endswith(":"):
+            col_aligns.append("center")
+        elif c.endswith(":"):
+            col_aligns.append("right")
         else:
-            align.append(WD_ALIGN_PARAGRAPH.LEFT)
-    while len(align) < ncols:
-        align.append(WD_ALIGN_PARAGRAPH.LEFT)
+            col_aligns.append("left")
+
+    header_cells = [_clean_html(c.strip()) for c in header_line.split("|") if c.strip()]
+    num_cols = len(header_cells)
+    if num_cols == 0:
+        return 0
 
     rows_data = []
-    j = start + 2
+    j = i + 2
     while j < len(lines):
-        row = lines[j].strip()
-        if not row or '|' not in row:
+        line = lines[j].strip()
+        if not line or "|" not in line:
             break
-        if row.startswith('#') or row.startswith('```'):
+        if line.startswith("#") or line.startswith("```"):
             break
-        cells = split_cells(row)
-        while len(cells) < ncols:
-            cells.append('')
-        rows_data.append(cells[:ncols])
+        cells = [_clean_html(c.strip()) for c in line.split("|")]
+        if cells and cells[0] == "":
+            cells = cells[1:]
+        if cells and cells[-1] == "":
+            cells = cells[:-1]
+        while len(cells) < num_cols:
+            cells.append("")
+        rows_data.append(cells[:num_cols])
         j += 1
 
-    # Build table
-    tbl = doc.add_table(rows=1 + len(rows_data), cols=ncols)
-    tbl.style = 'Table Grid'
-    tbl.alignment = WD_TABLE_ALIGNMENT.LEFT
+    # Create table
+    table = doc.add_table(rows=1 + len(rows_data), cols=num_cols)
+    table.style     = "Table Grid"
+    table.alignment = WD_TABLE_ALIGNMENT.LEFT
 
-    # Header row
-    for ci, htext in enumerate(headers):
-        cell = tbl.rows[0].cells[ci]
-        cell.text = ''
-        p = cell.paragraphs[0]
-        p.alignment = align[ci] if ci < len(align) else WD_ALIGN_PARAGRAPH.LEFT
-        _add_inline(htext, p, size=9)
-        for run in p.runs:
-            run.bold = True
-            run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+    # Header row — dark blue background, white text
+    for ci, cell_text in enumerate(header_cells):
+        cell = table.rows[0].cells[ci]
+        cell.text = ""
+        p   = cell.paragraphs[0]
+        run = p.add_run(cell_text)
+        run.bold       = True
+        run.font.size  = Pt(10)
+        run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
         p.paragraph_format.space_before = Pt(2)
-        p.paragraph_format.space_after = Pt(2)
-        _cell_bg(cell, '1F3864')
-        _cell_borders(cell, '1F3864')
+        p.paragraph_format.space_after  = Pt(2)
+        _set_cell_bg(cell, "1F3864")   # dark navy
+        _set_cell_border(cell, "1F3864")
 
     # Data rows
     for ri, row_cells in enumerate(rows_data):
-        bg = 'EBF3FB' if ri % 2 == 0 else 'FFFFFF'
-        for ci, ctext in enumerate(row_cells):
-            cell = tbl.rows[ri + 1].cells[ci]
-            cell.text = ''
+        bg = "EBF3FB" if ri % 2 == 0 else "FFFFFF"  # light blue / white alternating
+        for ci, cell_text in enumerate(row_cells):
+            cell = table.rows[ri + 1].cells[ci]
+            cell.text = ""
             p = cell.paragraphs[0]
-            p.alignment = align[ci] if ci < len(align) else WD_ALIGN_PARAGRAPH.LEFT
-            _add_inline(ctext, p, size=9)
             p.paragraph_format.space_before = Pt(1)
-            p.paragraph_format.space_after = Pt(1)
-            _cell_bg(cell, bg)
-            _cell_borders(cell, 'BDD7EE')
+            p.paragraph_format.space_after  = Pt(1)
+            _parse_inline(cell_text, p, font_size=10)
+            _set_cell_bg(cell, bg)
+            _set_cell_border(cell, "BDD7EE")
 
-    doc.add_paragraph()  # space after table
-    return j - start
+    # Add space after table
+    doc.add_paragraph()
+    return j - i
 
 
 # ── Code block ────────────────────────────────────────────────────────────────
 
-def _parse_code(doc, lines, start):
-    lang = lines[start].strip()[3:].strip()
-    j = start + 1
-    code = []
+def _parse_code_block(doc: Document, lines: list, i: int) -> int:
+    lang = lines[i].strip()[3:].strip()
+    j    = i + 1
+    code_lines = []
     while j < len(lines):
-        if lines[j].strip().startswith('```'):
+        if lines[j].strip().startswith("```"):
             j += 1
             break
-        code.append(lines[j].rstrip())
+        code_lines.append(lines[j].rstrip())
         j += 1
-    if code:
-        p = doc.add_paragraph()
-        p.paragraph_format.left_indent = Cm(0.5)
-        p.paragraph_format.space_before = Pt(4)
-        p.paragraph_format.space_after = Pt(4)
+
+    if code_lines:
+        p   = doc.add_paragraph()
         pPr = p._p.get_or_add_pPr()
-        shd = OxmlElement('w:shd')
-        shd.set(qn('w:val'), 'clear'); shd.set(qn('w:color'), 'auto'); shd.set(qn('w:fill'), 'F4F4F4')
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"),   "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"),  "F4F4F4")
         pPr.append(shd)
-        r = p.add_run('\n'.join(code))
-        r.font.name = 'Courier New'; r.font.size = Pt(9)
-        r.font.color.rgb = RGBColor(0x24, 0x29, 0x2E)
-    return j - start
+        p.paragraph_format.left_indent   = Cm(0.5)
+        p.paragraph_format.space_before  = Pt(4)
+        p.paragraph_format.space_after   = Pt(4)
+        run = p.add_run("\n".join(code_lines))
+        run.font.name  = "Courier New"
+        run.font.size  = Pt(9)
+        run.font.color.rgb = RGBColor(0x24, 0x29, 0x2E)
+        if lang:
+            p2  = doc.add_paragraph()
+            r2  = p2.add_run(f"  {lang}")
+            r2.font.size  = Pt(8)
+            r2.font.color.rgb = RGBColor(0x88, 0x88, 0x88)
+            r2.italic = True
+            p2.paragraph_format.space_before = Pt(0)
+            p2.paragraph_format.space_after  = Pt(2)
+    return j - i
 
 
-# ── Lists ─────────────────────────────────────────────────────────────────────
+# ── List parsers ──────────────────────────────────────────────────────────────
 
-def _parse_ulist(doc, lines, start):
-    i = start
+def _parse_unordered_list(doc: Document, lines: list, i: int) -> int:
+    start = i
     while i < len(lines):
         s = lines[i].strip()
         if not s:
             i += 1; continue
-        if not re.match(r'^[-*+•]\s', s):
+        if not re.match(r"^[\-\*\+]\s", s):
             break
-        text = re.sub(r'^[-*+•]\s+', '', s)
-        p = doc.add_paragraph(style='List Bullet')
-        _add_inline(text, p)
-        _para_spacing(p, 0, 2)
+        text = re.sub(r"^[\-\*\+]\s+", "", s)
+        p    = doc.add_paragraph(style="List Bullet")
+        _parse_inline(text, p)
+        _set_para_spacing(p, 0, 2)
         i += 1
     return i - start
 
 
-def _parse_olist(doc, lines, start):
-    i = start
+def _parse_ordered_list(doc: Document, lines: list, i: int) -> int:
+    start = i
     while i < len(lines):
         s = lines[i].strip()
         if not s:
             i += 1; continue
-        if not re.match(r'^\d+[.)]\s', s):
+        if not re.match(r"^\d+[\.\)]\s", s):
             break
-        text = re.sub(r'^\d+[.)]\s+', '', s)
-        p = doc.add_paragraph(style='List Number')
-        _add_inline(text, p)
-        _para_spacing(p, 0, 2)
+        text = re.sub(r"^\d+[\.\)]\s+", "", s)
+        p    = doc.add_paragraph(style="List Number")
+        _parse_inline(text, p)
+        _set_para_spacing(p, 0, 2)
         i += 1
     return i - start
 
 
 # ── Blockquote ────────────────────────────────────────────────────────────────
 
-def _parse_quote(doc, lines, start):
-    i = start
+def _parse_blockquote(doc: Document, lines: list, i: int) -> int:
+    start = i
     while i < len(lines):
         s = lines[i].strip()
-        if not s.startswith('>'):
+        if not s.startswith(">"):
             break
-        text = re.sub(r'^>\s?', '', s)
-        p = doc.add_paragraph()
+        text = re.sub(r"^>\s?", "", s)
+        p    = doc.add_paragraph()
         p.paragraph_format.left_indent = Cm(1.0)
-        pPr = p._p.get_or_add_pPr()
-        shd = OxmlElement('w:shd')
-        shd.set(qn('w:val'), 'clear'); shd.set(qn('w:color'), 'auto'); shd.set(qn('w:fill'), 'F0F4FF')
+        pPr  = p._p.get_or_add_pPr()
+        shd  = OxmlElement("w:shd")
+        shd.set(qn("w:val"),   "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"),  "F0F4FF")
         pPr.append(shd)
-        bdr = OxmlElement('w:pBdr')
-        left = OxmlElement('w:left')
-        left.set(qn('w:val'), 'single'); left.set(qn('w:sz'), '16')
-        left.set(qn('w:space'), '8'); left.set(qn('w:color'), '4472C4')
+        bdr  = OxmlElement("w:pBdr")
+        left = OxmlElement("w:left")
+        left.set(qn("w:val"),   "single")
+        left.set(qn("w:sz"),    "16")
+        left.set(qn("w:space"), "8")
+        left.set(qn("w:color"), "4472C4")
         bdr.append(left); pPr.append(bdr)
-        _add_inline(text, p)
-        _para_spacing(p, 2, 2)
+        _parse_inline(text, p)
+        _set_para_spacing(p, 2, 2)
         i += 1
     return i - start
 
 
 # ── Main converter ────────────────────────────────────────────────────────────
 
-HEADING_COLORS = {
-    1: RGBColor(0x1F, 0x38, 0x64),
-    2: RGBColor(0x2E, 0x74, 0xB5),
-    3: RGBColor(0x2E, 0x74, 0xB5),
-    4: RGBColor(0x40, 0x40, 0x40),
-}
-HEADING_SPACING = {1: (14, 6), 2: (10, 4), 3: (8, 3), 4: (6, 2)}
-
-
 def markdown_to_docx(markdown_text: str, docx_path: str, images_dict: dict = None):
     """
-    Converte Markdown (output Datalab/Marker) para DOCX fiel ao original.
-    - Remove carimbos e ruído OCR automaticamente
-    - Converte **negrito** e *itálico* em formatação Word real (sem asteriscos)
-    - Tabelas financeiras com cabeçalho colorido
-    - Títulos, listas, citações, separadores
+    Converte Markdown para DOCX formatado.
+    markdown_text : texto markdown (output do Datalab)
+    docx_path     : caminho de saída .docx
+    images_dict   : {nome: bytes} — imagens do Datalab (opcional)
     """
-    markdown_text = _clean_markdown(markdown_text)
+    # Limpar HTML residual do texto completo primeiro
+    markdown_text = re.sub(r"<!--.*?-->", "", markdown_text, flags=re.DOTALL)  # comentários HTML
 
-    doc = Document()
-    sec = doc.sections[0]
-    sec.top_margin = sec.bottom_margin = Cm(2.54)
-    sec.left_margin = sec.right_margin = Cm(2.54)
+    doc     = Document()
+    section = doc.sections[0]
+    section.top_margin    = Cm(2.54)
+    section.bottom_margin = Cm(2.54)
+    section.left_margin   = Cm(2.54)
+    section.right_margin  = Cm(2.54)
 
-    lines = markdown_text.split('\n')
-    i = 0
-    blank_streak = 0
+    # Estilos de título personalizados
+    from docx.shared import RGBColor as RGB
+    heading_colors = {
+        1: RGB(0x1F, 0x38, 0x64),  # navy escuro
+        2: RGB(0x2E, 0x74, 0xB5),  # azul médio
+        3: RGB(0x2E, 0x74, 0xB5),  # azul médio
+        4: RGB(0x40, 0x40, 0x40),  # cinza escuro
+    }
+
+    lines         = markdown_text.split("\n")
+    i             = 0
+    empty_streak  = 0
 
     while i < len(lines):
-        raw = lines[i]
-        s = raw.strip()
+        raw     = lines[i]
+        stripped = raw.strip()
 
-        # Blank line
-        if not s:
-            blank_streak += 1
-            if blank_streak == 1:
+        # ── Linha vazia ───────────────────────────────────────────────────────
+        if not stripped:
+            empty_streak += 1
+            if empty_streak == 1:
                 doc.add_paragraph()
             i += 1
             continue
-        blank_streak = 0
+        empty_streak = 0
 
-        # Code block
-        if s.startswith('```'):
-            n = _parse_code(doc, lines, i)
-            i += n if n > 0 else 1
+        # ── Bloco de código ───────────────────────────────────────────────────
+        if stripped.startswith("```"):
+            consumed = _parse_code_block(doc, lines, i)
+            i += consumed if consumed > 0 else 1
             continue
 
-        # Horizontal rule
-        if re.match(r'^[-*_]{3,}$', s):
-            p = doc.add_paragraph()
+        # ── Separador horizontal ──────────────────────────────────────────────
+        if re.match(r"^[-\*_]{3,}$", stripped):
+            p   = doc.add_paragraph()
             pPr = p._p.get_or_add_pPr()
-            pBdr = OxmlElement('w:pBdr')
-            bot = OxmlElement('w:bottom')
-            bot.set(qn('w:val'), 'single'); bot.set(qn('w:sz'), '6')
-            bot.set(qn('w:space'), '1'); bot.set(qn('w:color'), 'AAAAAA')
+            pBdr = OxmlElement("w:pBdr")
+            bot  = OxmlElement("w:bottom")
+            bot.set(qn("w:val"),   "single")
+            bot.set(qn("w:sz"),    "6")
+            bot.set(qn("w:space"), "1")
+            bot.set(qn("w:color"), "AAAAAA")
             pBdr.append(bot); pPr.append(pBdr)
             i += 1
             continue
 
-        # Table
-        if '|' in s and i + 1 < len(lines):
-            nxt = lines[i + 1].strip()
-            if re.match(r'^[\s|:\-]+$', nxt) and '|' in nxt:
-                n = _parse_table(doc, lines, i)
-                if n > 0:
-                    i += n
+        # ── Tabela ────────────────────────────────────────────────────────────
+        if "|" in stripped and i + 1 < len(lines):
+            next_stripped = lines[i + 1].strip()
+            if re.match(r"^[\s|:\-]+$", next_stripped) and "|" in next_stripped:
+                consumed = _parse_table(doc, lines, i)
+                if consumed > 0:
+                    i += consumed
                     continue
 
-        # Heading
-        hm = re.match(r'^(#{1,6})\s+(.+)$', s)
+        # ── Título ────────────────────────────────────────────────────────────
+        hm = re.match(r"^(#{1,6})\s+(.+)$", stripped)
         if hm:
             level = min(len(hm.group(1)), 4)
-            text = re.sub(r'<[^>]+>', '', hm.group(2))
-            # Strip trailing markdown formatting from heading text
-            text = re.sub(r'\*+$', '', text).strip()
-            p = doc.add_heading(text, level=level)
+            text  = _clean_html(hm.group(2))
+            p     = doc.add_heading(text, level=level)
+            # Aplicar cor ao título
             for run in p.runs:
-                run.font.color.rgb = HEADING_COLORS.get(level, HEADING_COLORS[4])
-                run.bold = True
-            bef, aft = HEADING_SPACING.get(level, (6, 2))
-            _para_spacing(p, bef, aft)
+                run.font.color.rgb = heading_colors.get(level, RGB(0x1F, 0x38, 0x64))
+            spaces = {1: (12, 6), 2: (10, 4), 3: (8, 3), 4: (6, 2)}
+            bef, aft = spaces.get(level, (6, 2))
+            _set_para_spacing(p, bef, aft)
             i += 1
             continue
 
-        # Unordered list
-        if re.match(r'^[-*+•]\s', s):
-            n = _parse_ulist(doc, lines, i)
-            if n > 0:
-                i += n
+        # ── Lista não ordenada ────────────────────────────────────────────────
+        if re.match(r"^[\-\*\+]\s", stripped):
+            consumed = _parse_unordered_list(doc, lines, i)
+            if consumed > 0:
+                i += consumed
                 continue
 
-        # Ordered list
-        if re.match(r'^\d+[.)]\s', s):
-            n = _parse_olist(doc, lines, i)
-            if n > 0:
-                i += n
+        # ── Lista ordenada ────────────────────────────────────────────────────
+        if re.match(r"^\d+[\.\)]\s", stripped):
+            consumed = _parse_ordered_list(doc, lines, i)
+            if consumed > 0:
+                i += consumed
                 continue
 
-        # Blockquote
-        if s.startswith('>'):
-            n = _parse_quote(doc, lines, i)
-            if n > 0:
-                i += n
+        # ── Citação ───────────────────────────────────────────────────────────
+        if stripped.startswith(">"):
+            consumed = _parse_blockquote(doc, lines, i)
+            if consumed > 0:
+                i += consumed
                 continue
 
-        # Image (inline or block)
-        img_m = re.match(r'^!\[([^\]]*)\]\(([^)]+)\)$', s)
+        # ── Imagem ────────────────────────────────────────────────────────────
+        img_m = re.match(r"^!\[([^\]]*)\]\(([^)]+)\)$", stripped)
         if img_m:
             alt, img_path = img_m.group(1), img_m.group(2)
             inserted = False
             if images_dict:
-                key = next((k for k in images_dict if k.endswith(img_path) or img_path in k), None)
+                key = next((k for k in images_dict
+                            if k.endswith(img_path) or img_path in k), None)
                 if key:
                     try:
                         data = images_dict[key]
@@ -457,29 +462,51 @@ def markdown_to_docx(markdown_text: str, docx_path: str, images_dict: dict = Non
                     except Exception:
                         pass
             if not inserted:
-                ap = Path(img_path)
-                if ap.exists():
+                actual = Path(img_path)
+                if actual.exists():
                     try:
                         p = doc.add_paragraph()
                         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                        p.add_run().add_picture(str(ap), width=Inches(5.0))
+                        p.add_run().add_picture(str(actual), width=Inches(5.0))
                         inserted = True
                     except Exception:
                         pass
             if not inserted:
-                # Show image placeholder — always keep, skip only stamp/noise descriptions
-                label = alt if alt and not _is_noise_line(alt) else "IMAGEM"
-                p = doc.add_paragraph()
-                r = p.add_run(f'[ {label} ]')
-                r.italic = True
-                r.font.color.rgb = RGBColor(0x44, 0x72, 0xC4)
+                p   = doc.add_paragraph()
+                run = p.add_run(f"[{alt or 'IMAGEM'}]")
+                run.italic = True
+                run.font.color.rgb = RGBColor(0x88, 0x88, 0x88)
             i += 1
             continue
 
-        # Normal paragraph — convert inline markdown to Word formatting
+        # ── Placeholder de imagem classificada ────────────────────────────────
+        ph_m = re.match(r"^\[(carimbo|assinatura|logo\s*marca)\]$", stripped)
+        if ph_m:
+            ptype = ph_m.group(1)
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            bg_colors = {"carimbo": "FFF5F5", "assinatura": "F0F8FF", "logo marca": "F5F5F5"}
+            pPr = p._p.get_or_add_pPr()
+            shd = OxmlElement("w:shd")
+            shd.set(qn("w:val"), "clear"); shd.set(qn("w:color"), "auto")
+            shd.set(qn("w:fill"), bg_colors.get(ptype, "F9F9F9"))
+            pPr.append(shd)
+            bdr = OxmlElement("w:pBdr")
+            left = OxmlElement("w:left")
+            left.set(qn("w:val"), "single"); left.set(qn("w:sz"), "12")
+            left.set(qn("w:space"), "6")
+            border_colors = {"carimbo": "C0392B", "assinatura": "2E86C1", "logo marca": "6C6C6C"}
+            left.set(qn("w:color"), border_colors.get(ptype, "999999"))
+            bdr.append(left); pPr.append(bdr)
+            _parse_inline(stripped, p, font_size=10)
+            _set_para_spacing(p, 3, 3)
+            i += 1
+            continue
+
+        # ── Parágrafo normal ──────────────────────────────────────────────────
         p = doc.add_paragraph()
-        _add_inline(s, p, size=11)
-        _para_spacing(p, 0, 3)
+        _parse_inline(stripped, p, font_size=11)
+        _set_para_spacing(p, 0, 3)
         i += 1
 
     doc.save(str(docx_path))
