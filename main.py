@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-PDF Translator Pro v5.0
-- Fiel ao documento original (tabelas, paragrafos, fontes, numeracao)
-- Traduz apenas o texto (se pedido)
-- Imagens substituidas por [LOGOMARCA] ou [CARIMBO]
+Universal PDF Translator Pro v7.0
+==================================
+Motor 1: Marker local (instalar marker-pdf)
+Motor 2: Datalab API (OCR na nuvem — recomendado para PDFs escaneados)
+
+Saída: DOCX formatado via markdown_to_docx.py
+Tradução: Google Translate com cache e retry automático
 """
 
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
@@ -12,15 +15,31 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
-import uuid, json, zipfile, shutil, asyncio
+import uuid, json, zipfile, shutil, asyncio, re, time, os
 from pathlib import Path
 from datetime import datetime
 import logging
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="PDF Translator Pro", version="5.0.0")
+# ── Limites e configuração ────────────────────────────────────────────────────
+MAX_CONCURRENT       = 4
+FILE_TIMEOUT_SECONDS = 3600  # 1 hora por ficheiro (documentos grandes)
+MAX_UPLOAD_BYTES     = 100 * 1024 * 1024   # 100 MB
+MAX_ZIP_MEMBERS      = 100
+MAX_ZIP_TOTAL_BYTES  = 200 * 1024 * 1024
+
+# ── Datalab API ───────────────────────────────────────────────────────────────
+DATALAB_API_KEY  = os.environ.get("DATALAB_API_KEY", "nyeSwMeyBnFJAvcL0zrp_EJl4LgSVIw6V3ZHMFqniZM")
+DATALAB_CONV_URL = "https://www.datalab.to/api/v1/convert"
+DATALAB_OCR_URL  = "https://www.datalab.to/api/v1/ocr"
+
+# ── Cache de traduções ────────────────────────────────────────────────────────
+_translation_cache: dict = {}
+
+# ── FastAPI ───────────────────────────────────────────────────────────────────
+app = FastAPI(title="Universal PDF Translator Pro", version="7.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
@@ -33,33 +52,53 @@ JOBS_DIR   = BASE_DIR / "jobs"
 for d in [STATIC_DIR, UPLOAD_DIR, OUTPUT_DIR, JOBS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-logger.info("BASE_DIR: %s", BASE_DIR)
-logger.info("index.html exists: %s", (STATIC_DIR / "index.html").exists())
-
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+MIME_MAP = {
+    ".pdf":  "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".doc":  "application/msword",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".html": "text/html", ".htm": "text/html", ".txt": "text/plain",
+    ".png":  "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".tiff": "image/tiff", ".bmp": "image/bmp",
+}
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".webp"}
+
+
+# ── Modelos Pydantic ──────────────────────────────────────────────────────────
 
 class ProcessRequest(BaseModel):
-    job_id: str
-    target_language: str = "pt"
-    image_mode: str      = "placeholder"
-    output_pdf: bool     = False
-    remove_images: bool  = False
+    job_id:          str
+    target_language: str  = "pt"
+    image_mode:      str  = "placeholder"   # placeholder | keep | remove
+    remove_images:   bool = False
+    engine:          str  = "datalab"        # datalab | marker
+    datalab_mode:    str  = "balanced"       # fast | balanced | accurate
+    datalab_output:  str  = "markdown"       # markdown | html | json
 
+
+# ── Job helpers ───────────────────────────────────────────────────────────────
+
+def sanitize_filename(filename: str) -> str:
+    return "".join(c for c in filename if c.isalnum() or c in "._- ()").strip() or "file.pdf"
 
 def save_job(job):
     (JOBS_DIR / f"{job['job_id']}.json").write_text(
         json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")
 
-def load_job(job_id):
+def load_job(job_id: str):
     p = JOBS_DIR / f"{job_id}.json"
     if not p.exists():
         raise HTTPException(404, "Job not found")
     return json.loads(p.read_text(encoding="utf-8"))
 
-def list_jobs():
+def list_jobs(limit=50):
     out = []
     for p in sorted(JOBS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+        if len(out) >= limit:
+            break
         try:
             out.append(json.loads(p.read_text(encoding="utf-8")))
         except Exception:
@@ -67,376 +106,565 @@ def list_jobs():
     return out
 
 
-#  TRANSLATION 
+# ── Tradução com cache e retry ────────────────────────────────────────────────
 
-def translate_text(text, lang, translator):
-    """Translate a single string. Returns original if translation fails."""
+def _translate_chunk(text: str, translator, retry: int = 0) -> str:
+    """Traduz um chunk com cache + retry. Max 1500 chars por chamada (limite Google)."""
     if not text or not text.strip():
         return text
-    try:
-        MAX = 4800
-        if len(text) <= MAX:
-            r = translator.translate(text)
-            return r.strip() if r else text
-        # Split long text
+
+    MAX_CHARS = 1500
+
+    # Split if too long
+    if len(text) > MAX_CHARS:
+        sentences = re.split(r"(?<=[.!?])\s+", text)
         parts, buf = [], ""
-        for sentence in text.replace(". ", ".|||").split("|||"):
-            if len(buf) + len(sentence) < MAX:
-                buf += sentence
+        for s in sentences:
+            if len(buf) + len(s) + 1 <= MAX_CHARS:
+                buf = (buf + " " + s).strip()
             else:
                 if buf:
-                    r = translator.translate(buf)
-                    parts.append(r.strip() if r else buf)
-                buf = sentence
+                    parts.append(_translate_chunk(buf, translator, retry))
+                buf = s
         if buf:
-            r = translator.translate(buf)
-            parts.append(r.strip() if r else buf)
+            parts.append(_translate_chunk(buf, translator, retry))
         return " ".join(parts)
+
+    cached = _translation_cache.get(text)
+    if cached:
+        return cached
+    try:
+        time.sleep(0.5)
+        r = translator.translate(text)
+        result = r.strip() if r else text
+        _translation_cache[text] = result
+        return result
     except Exception as e:
-        import time
         msg = str(e)
-        if "429" in msg or "TooMany" in msg:
-            time.sleep(4)
+        wait = min(5 * (retry + 1), 60)
+        logger.warning("translate error (retry %d): %s — waiting %ds", retry + 1, msg, wait)
+        time.sleep(wait)
+        if retry < 4:
+            return _translate_chunk(text, translator, retry + 1)
+        logger.error("Translation failed after %d retries, keeping original", retry + 1)
+        return text
+
+
+def translate_markdown(md_text: str, translator) -> str:
+    """
+    Traduz markdown preservando estrutura.
+    Para documentos grandes (>50k chars), divide em páginas para evitar
+    rate limit do Google Translate.
+    """
+    # Para documentos muito grandes, dividir em secções por página markdown
+    PAGE_SEP = "\n\n---\n\n"
+    CHUNK_LIMIT = 60000  # split point for large docs
+
+    if len(md_text) > CHUNK_LIMIT:
+        # Dividir em blocos de ~40k chars respeitando parágrafos
+        blocks = []
+        current = []
+        current_len = 0
+        for para in md_text.split("\n\n"):
+            if current_len + len(para) > CHUNK_LIMIT and current:
+                blocks.append("\n\n".join(current))
+                current = [para]
+                current_len = len(para)
+            else:
+                current.append(para)
+                current_len += len(para)
+        if current:
+            blocks.append("\n\n".join(current))
+
+        total_blocks = len(blocks)
+        logger.info("Translating large doc: %d blocks, %d chars total", total_blocks, len(md_text))
+        translated_blocks = []
+        for i, block in enumerate(blocks):
+            logger.info("Translating block %d/%d (%d chars)...", i+1, total_blocks, len(block))
             try:
-                r = translator.translate(text[:MAX])
-                return r.strip() if r else text
+                translated_blocks.append(_translate_markdown_block(block, translator))
+            except Exception as e:
+                logger.error("Block %d/%d failed: %s — keeping original", i+1, total_blocks, e)
+                translated_blocks.append(block)
+        return "\n\n".join(translated_blocks)
+
+    return _translate_markdown_block(md_text, translator)
+
+
+def _translate_markdown_block(md_text: str, translator) -> str:
+    """Traduz um bloco de markdown preservando estrutura."""
+    lines = md_text.split("\n")
+    out, batch, code_block = [], [], False
+
+    def flush():
+        if not batch:
+            return
+        chunk = "\n".join(batch)
+        out.extend(_translate_chunk(chunk, translator).split("\n"))
+        batch.clear()
+
+    for line in lines:
+        s = line.strip()
+        if s.startswith("```"):
+            flush(); out.append(line); code_block = not code_block; continue
+        if code_block:
+            out.append(line); continue
+        if not s:
+            flush(); out.append(line); continue
+        if s in ("---", "***", "___"):
+            flush(); out.append(line); continue
+        if re.match(r"^!\[", s):
+            flush(); out.append(line); continue
+        if "|" in s and re.match(r"^[\s|:\-]+$", s):
+            flush(); out.append(line); continue
+        m = re.match(r"^(#{1,6}\s+)(.*)", line)
+        if m:
+            flush()
+            out.append(m.group(1) + _translate_chunk(m.group(2), translator))
+            continue
+        batch.append(line)
+        if len("\n".join(batch)) >= 1200:
+            flush()
+
+    flush()
+    return "\n".join(out)
+
+
+def translate_html(html_text: str, translator) -> str:
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html_text, "html.parser")
+        for tag in soup.find_all(string=True):
+            if tag.parent.name in ("script", "style", "code", "pre"):
+                continue
+            if tag.strip():
+                tag.replace_with(_translate_chunk(str(tag), translator))
+        return str(soup)
+    except Exception as e:
+        logger.warning("HTML translation failed: %s", e)
+        return html_text
+
+
+def translate_json_obj(obj, translator):
+    if isinstance(obj, dict):
+        return {k: translate_json_obj(v, translator) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [translate_json_obj(i, translator) for i in obj]
+    if isinstance(obj, str) and obj.strip() and len(obj) > 3:
+        return _translate_chunk(obj, translator)
+    return obj
+
+
+def get_translator(lang: str):
+    if not lang or lang in ("none", "original", ""):
+        return None
+    try:
+        from deep_translator import GoogleTranslator
+        t = GoogleTranslator(source="auto", target=lang)
+        logger.info("Translator ready: auto → %s", lang)
+        return t
+    except ImportError:
+        logger.error("deep_translator not installed — pip install deep-translator")
+        return None
+    except Exception as e:
+        logger.error("Failed to create translator: %s", e)
+        return None
+
+
+# ── Polling Datalab ───────────────────────────────────────────────────────────
+
+def _datalab_poll(check_url: str, headers: dict, label: str, max_minutes=12) -> dict:
+    import requests
+    for attempt in range(max_minutes * 15):
+        time.sleep(4)
+        r = requests.get(check_url, headers=headers, timeout=30)
+        r.raise_for_status()
+        result = r.json()
+        status = result.get("status", "")
+        if attempt % 5 == 0:
+            logger.info("Datalab %s: %s (attempt %d)", label, status, attempt + 1)
+        if status == "complete":
+            return result
+        if status == "failed":
+            raise RuntimeError(f"Datalab {label} failed: {result.get('error', '')}")
+    raise TimeoutError(f"Datalab {label}: timeout after {max_minutes} min")
+
+
+# ── Motor 1: Datalab API ──────────────────────────────────────────────────────
+
+def convert_with_datalab(src_path: Path, out_path: Path,
+                          lang="pt", do_translate=True,
+                          output_format="markdown", mode="balanced",
+                          image_mode="placeholder") -> dict:
+    """
+    Converte qualquer documento via Datalab API:
+    - Imagens/PDFs escaneados → OCR endpoint (Chandra/Surya)
+    - PDFs digitais/Office    → Marker endpoint (force_ocr=true)
+    Depois converte markdown → DOCX via markdown_to_docx.py
+    """
+    import requests, base64
+
+    key = DATALAB_API_KEY.strip()
+    if not key:
+        raise ValueError("DATALAB_API_KEY not set")
+
+    headers = {"X-API-Key": key}
+    ext     = src_path.suffix.lower()
+    mime    = MIME_MAP.get(ext, "application/octet-stream")
+    is_img  = ext in IMAGE_EXTS
+
+    # ── Submissão com retry automático ───────────────────────────────────────
+    def _submit(attempt=0):
+        with open(str(src_path), "rb") as f:
+            if is_img:
+                r = requests.post(
+                    DATALAB_OCR_URL,
+                    files={"file": (src_path.name, f, mime)},
+                    data={"langs": "auto"},
+                    headers=headers,
+                    timeout=None,  # (connect, read) — 5 min para upload
+                )
+                return r, "OCR"
+            else:
+                r = requests.post(
+                    DATALAB_CONV_URL,
+                    files={"file": (src_path.name, f, mime)},
+                    data={
+                        "output_format":          output_format,
+                        "mode":                   mode,
+                        "force_ocr":              "true",
+                        "disable_image_extraction": "false",
+                    },
+                    headers=headers,
+                    timeout=None,  # (connect, read) — 5 min para upload
+                )
+                return r, "Marker"
+
+    resp, label = None, "Marker"
+    for attempt in range(3):
+        try:
+            if is_img:
+                logger.info("Datalab OCR: %s (attempt %d)", src_path.name, attempt + 1)
+            else:
+                logger.info("Datalab Marker: %s (mode=%s, format=%s, force_ocr=true, attempt=%d)",
+                            src_path.name, mode, output_format, attempt + 1)
+            resp, label = _submit(attempt)
+            resp.raise_for_status()
+            break
+        except Exception as e:
+            wait = 10 * (attempt + 1)
+            logger.warning("Upload attempt %d failed: %s — waiting %ds", attempt + 1, e, wait)
+            time.sleep(wait)
+            if attempt == 2:
+                raise
+
+    data = resp.json()
+    if not data.get("success"):
+        raise RuntimeError(f"Datalab {label} submit failed: {data.get('error', data)}")
+    logger.info("Datalab %s: submitted (id=%s)", label, data.get("request_id", "?"))
+
+    # ── Polling ───────────────────────────────────────────────────────────────
+    result = _datalab_poll(data["request_check_url"], headers, label)
+    pages  = result.get("page_count", "?")
+    score  = result.get("parse_quality_score", "?")
+    logger.info("Datalab %s: complete — %s pages, quality=%s", label, pages, score)
+
+    # ── Extracção de texto ────────────────────────────────────────────────────
+    if is_img:
+        lines = []
+        for page in result.get("pages", []):
+            for block in page.get("text_lines", []):
+                t = block.get("text", "").strip()
+                if t:
+                    lines.append(t)
+            lines.append("")
+        text_content  = "\n".join(lines)
+        output_format = "markdown"
+    elif output_format == "json":
+        import json as _json
+        text_content = _json.dumps(result.get("json", {}), ensure_ascii=False, indent=2)
+    else:
+        text_content = result.get(output_format, "") or result.get("markdown", "")
+
+    if not text_content or not text_content.strip():
+        raise RuntimeError("Datalab returned empty content — document may be empty or protected")
+
+    total_chars = len(text_content)
+    logger.info("Datalab: extracted %d chars", total_chars)
+
+    # ── Tratamento de imagens no markdown ─────────────────────────────────────
+    images = result.get("images", {})
+    if output_format == "markdown" and not is_img:
+        if image_mode == "remove":
+            text_content = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", text_content)
+        elif image_mode == "placeholder":
+            text_content = re.sub(
+                r"!\[([^\]]*)\]\([^)]+\)",
+                lambda m: f"[{m.group(1) or 'IMAGEM'}]",
+                text_content
+            )
+
+    # ── Tradução ──────────────────────────────────────────────────────────────
+    if do_translate and lang not in ("", "none", "original"):
+        translator = get_translator(lang)
+        if translator:
+            logger.info("Datalab: translating to %s...", lang)
+            if output_format == "html":
+                text_content = translate_html(text_content, translator)
+            elif output_format == "json":
+                import json as _json
+                text_content = _json.dumps(
+                    translate_json_obj(result.get("json", {}), translator),
+                    ensure_ascii=False, indent=2)
+            else:
+                text_content = translate_markdown(text_content, translator)
+            logger.info("Datalab: translation complete")
+
+    # ── Guardar imagens base64 ────────────────────────────────────────────────
+    img_dict_bytes = {}
+    if images:
+        for img_name, img_b64 in images.items():
+            try:
+                img_dict_bytes[img_name] = base64.b64decode(img_b64)
             except Exception:
                 pass
-        logger.warning("translate error: %s", e)
-        return text
+        if image_mode == "keep":
+            img_dir = out_path.parent / (out_path.stem + "_images")
+            img_dir.mkdir(exist_ok=True)
+            for img_name, img_bytes in img_dict_bytes.items():
+                (img_dir / img_name).write_bytes(img_bytes)
+            logger.info("Datalab: saved %d images", len(img_dict_bytes))
 
-
-#  IMAGE CLASSIFICATION 
-
-def classify_image(bbox, page_w, page_h):
-    x0, y0, x1, y1 = bbox
-    w = x1 - x0
-    h = y1 - y0
-    area_ratio = (w * h) / max(page_w * page_h, 1)
-    aspect = w / max(h, 1)
-    in_header = y0 < page_h * 0.20
-    in_footer = y1 > page_h * 0.80
-    is_small  = area_ratio < 0.10
-    is_square = 0.5 < aspect < 2.0
-
-    if is_small and (in_header or in_footer):
-        return "[LOGOMARCA]"
-    if is_small and is_square:
-        return "[CARIMBO]"
-    return "[FIGURA]"
-
-
-#  CORE: PDF -> DOCX with faithful structure 
-
-def pdf_to_docx(pdf_path, docx_path, lang="pt", do_translate=True, image_mode="placeholder"):
-    """
-    Convert PDF to DOCX preserving 100% of the structure.
-    Uses pdf2docx for faithful conversion, then post-processes for translation.
-    Falls back to manual block reconstruction if pdf2docx unavailable.
-    """
-    import fitz
-    from docx import Document
-    from docx.shared import Pt, RGBColor, Cm, Inches
-    from docx.oxml.ns import qn
-    from docx.oxml import OxmlElement
-    import io
-
-    # Setup translator
-    translator = None
-    if do_translate and lang not in ("", "none"):
+    # ── Converter markdown → DOCX ─────────────────────────────────────────────
+    saved_as_docx = False
+    if output_format == "markdown":
         try:
-            from deep_translator import GoogleTranslator
-            translator = GoogleTranslator(source="auto", target=lang)
+            from markdown_to_docx import markdown_to_docx
+            docx_path = out_path.with_suffix(".docx")
+            markdown_to_docx(
+                text_content,
+                str(docx_path),
+                images_dict=img_dict_bytes if image_mode == "keep" else None
+            )
+            out_path      = docx_path
+            saved_as_docx = True
+            logger.info("Datalab: markdown → DOCX OK")
         except ImportError:
-            logger.warning("deep_translator not installed")
+            logger.warning("markdown_to_docx.py not found — saving as .md")
+        except Exception as e:
+            logger.warning("markdown_to_docx failed (%s) — saving as .md", e)
 
-    def tr(text):
-        if translator and text and text.strip():
-            return translate_text(text, lang, translator)
-        return text
+    if not saved_as_docx:
+        ext_map  = {"markdown": ".md", "html": ".html", "json": ".json"}
+        out_path = out_path.with_suffix(ext_map.get(output_format, ".md"))
+        out_path.write_text(text_content, encoding="utf-8")
 
-    #  Try pdf2docx first (best fidelity) 
+    size_kb = round(out_path.stat().st_size / 1024, 1)
+    logger.info("Datalab: saved → %s (%.1f KB)", out_path.name, size_kb)
+
+    return {
+        "total_chars":       total_chars,
+        "extraction_method": f"datalab_{label.lower()}",
+        "pdf_type":          "scanned",
+        "page_count":        pages,
+        "quality_score":     score,
+        "output_path":       str(out_path),
+        "output_name":       out_path.name,
+        "size_kb":           size_kb,
+    }
+
+
+# ── Motor 2: Marker local ─────────────────────────────────────────────────────
+
+def convert_with_marker(src_path: Path, out_path: Path,
+                         lang="pt", do_translate=True,
+                         image_mode="placeholder") -> dict:
+    """
+    Converte PDF usando Marker instalado localmente.
+    Requer: pip install marker-pdf
+    """
+    logger.info("Marker local: converting %s", src_path.name)
+
+    from marker.converters.pdf import PdfConverter
+    from marker.models import create_model_dict
+    from marker.output import text_from_rendered
+
+    converter = PdfConverter(artifact_dict=create_model_dict())
+    rendered  = converter(str(src_path))
+    markdown_text, metadata, images_by_block = text_from_rendered(rendered)
+
+    total_chars = len(markdown_text)
+    logger.info("Marker: extracted %d chars", total_chars)
+
+    # Tratamento de imagens
+    if image_mode == "remove":
+        markdown_text  = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", markdown_text)
+        images_by_block = {}
+    elif image_mode == "placeholder":
+        markdown_text  = re.sub(
+            r"!\[([^\]]*)\]\([^)]+\)",
+            lambda m: f"[{m.group(1) or 'IMAGEM'}]",
+            markdown_text
+        )
+        images_by_block = {}
+
+    # Tradução
+    if do_translate and lang not in ("", "none", "original"):
+        translator = get_translator(lang)
+        if translator:
+            logger.info("Marker: translating to %s...", lang)
+            markdown_text = translate_markdown(markdown_text, translator)
+            logger.info("Marker: translation complete")
+
+    # Converter markdown → DOCX
     try:
-        from pdf2docx import Converter
-        logger.info("Using pdf2docx for faithful conversion...")
-        cv = Converter(str(pdf_path))
-        cv.convert(str(docx_path), start=0, end=None)
-        cv.close()
-        logger.info("pdf2docx conversion done")
-
-        if do_translate and translator:
-            logger.info("Post-processing: translating text in DOCX...")
-            _translate_docx_inplace(docx_path, translator, lang)
-            logger.info("Translation done")
-
-        # Handle images in the converted DOCX
-        if image_mode == "placeholder":
-            _replace_images_in_docx(docx_path)
-
-        return
-
+        from markdown_to_docx import markdown_to_docx
+        docx_path = out_path.with_suffix(".docx")
+        markdown_to_docx(markdown_text, str(docx_path), images_dict=images_by_block)
+        out_path = docx_path
+        logger.info("Marker: markdown → DOCX OK")
     except ImportError:
-        logger.info("pdf2docx not available, using manual reconstruction...")
+        logger.warning("markdown_to_docx.py not found — saving as .md")
+        out_path = out_path.with_suffix(".md")
+        out_path.write_text(markdown_text, encoding="utf-8")
     except Exception as e:
-        logger.warning("pdf2docx failed (%s), falling back...", e)
+        logger.warning("markdown_to_docx failed (%s) — saving as .md", e)
+        out_path = out_path.with_suffix(".md")
+        out_path.write_text(markdown_text, encoding="utf-8")
 
-    #  Fallback: manual block-by-block reconstruction 
-    logger.info("Manual PDF->DOCX reconstruction...")
-    doc_out = Document()
+    size_kb = round(out_path.stat().st_size / 1024, 1)
+    logger.info("Marker: saved → %s (%.1f KB)", out_path.name, size_kb)
 
-    # Match A4 margins
-    for sec in doc_out.sections:
-        sec.top_margin    = Cm(2.54)
-        sec.bottom_margin = Cm(2.54)
-        sec.left_margin   = Cm(3.17)
-        sec.right_margin  = Cm(3.17)
-
-    doc_pdf = fitz.open(str(pdf_path))
-    total_elements = 0
-
-    for pn, page in enumerate(doc_pdf):
-        if pn > 0:
-            doc_out.add_page_break()
-
-        pw = page.rect.width
-        ph = page.rect.height
-
-        # Get all blocks sorted in reading order
-        blocks = sorted(page.get_text("dict")["blocks"],
-                        key=lambda b: (round(b["bbox"][1] / 10) * 10, b["bbox"][0]))
-
-        for block in blocks:
-            btype = block["type"]
-
-            #  IMAGE block 
-            if btype == 1:
-                if image_mode == "remove":
-                    continue
-                label = classify_image(block["bbox"], pw, ph)
-                p = doc_out.add_paragraph()
-                run = p.add_run(label)
-                run.font.size      = Pt(9)
-                run.font.italic    = True
-                run.font.color.rgb = RGBColor(0x77, 0x77, 0x77)
-                # Light grey background
-                pPr = p._p.get_or_add_pPr()
-                shd = OxmlElement("w:shd")
-                shd.set(qn("w:val"), "clear")
-                shd.set(qn("w:color"), "auto")
-                shd.set(qn("w:fill"), "F2F2F2")
-                pPr.append(shd)
-                p.paragraph_format.space_before = Pt(2)
-                p.paragraph_format.space_after  = Pt(2)
-                continue
-
-            #  TEXT block 
-            if btype != 0:
-                continue
-
-            lines = block.get("lines", [])
-            if not lines:
-                continue
-
-            # Collect all spans grouped by line
-            line_texts = []
-            for line in lines:
-                spans = line.get("spans", [])
-                line_text = "".join(s.get("text", "") for s in spans)
-                if line_text.strip():
-                    line_texts.append(line_text)
-
-            if not line_texts:
-                continue
-
-            # Full paragraph text
-            full_text = " ".join(t.strip() for t in line_texts if t.strip())
-            if not full_text:
-                continue
-
-            # Get dominant formatting from first non-empty span
-            dom_size   = 11.0
-            dom_bold   = False
-            dom_italic = False
-            dom_font   = "Calibri"
-            for line in lines:
-                for span in line.get("spans", []):
-                    if span.get("text", "").strip():
-                        dom_size   = span.get("size", 11.0)
-                        dom_bold   = bool(span.get("flags", 0) & 16)
-                        dom_italic = bool(span.get("flags", 0) & 2)
-                        dom_font   = span.get("font", "Calibri")
-                        break
-                else:
-                    continue
-                break
-
-            font_pt = min(max(round(dom_size), 6), 72)
-
-            # Translate
-            translated = tr(full_text)
-            total_elements += 1
-
-            # Heading detection: large+bold, short text
-            is_heading = (font_pt >= 14 or (font_pt >= 12 and dom_bold)) \
-                         and len(translated) < 200
-
-            if is_heading:
-                level = 1 if font_pt >= 20 else (2 if font_pt >= 16 else 3)
-                p = doc_out.add_heading(translated, level=level)
-            else:
-                p   = doc_out.add_paragraph()
-                run = p.add_run(translated)
-                run.bold      = dom_bold
-                run.italic    = dom_italic
-                run.font.size = Pt(font_pt)
-                try:
-                    run.font.name = dom_font.split("+")[-1] if "+" in dom_font else dom_font
-                except Exception:
-                    pass
-
-            # Spacing proportional to original
-            p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after  = Pt(round(dom_size * 0.3))
-
-    doc_pdf.close()
-    doc_out.save(str(docx_path))
-    logger.info("Manual reconstruction done: %d elements", total_elements)
+    return {
+        "total_chars":       total_chars,
+        "extraction_method": "marker_local",
+        "pdf_type":          "scanned" if total_chars > 0 else "text",
+        "output_path":       str(out_path),
+        "output_name":       out_path.name,
+        "size_kb":           size_kb,
+    }
 
 
-def _translate_docx_inplace(docx_path, translator, lang):
-    """Translate all text in an existing DOCX file in-place."""
-    from docx import Document
-    doc = Document(str(docx_path))
-    done = 0
+# ── Processador de ficheiros ──────────────────────────────────────────────────
 
-    # Paragraphs
-    for para in doc.paragraphs:
-        if para.text.strip():
-            translated = translate_text(para.text, lang, translator)
-            if translated and translated != para.text:
-                # Replace text preserving runs formatting
-                if len(para.runs) == 1:
-                    para.runs[0].text = translated
-                else:
-                    # Clear all runs, put text in first
-                    for i, run in enumerate(para.runs):
-                        run.text = translated if i == 0 else ""
-            done += 1
+def process_file(file_info: dict, out_dir: Path, lang: str,
+                 image_mode: str, do_translate: bool,
+                 engine: str, datalab_mode: str, datalab_output: str) -> dict:
 
-    # Tables
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    if para.text.strip():
-                        translated = translate_text(para.text, lang, translator)
-                        if translated and translated != para.text:
-                            if len(para.runs) == 1:
-                                para.runs[0].text = translated
-                            elif para.runs:
-                                for i, run in enumerate(para.runs):
-                                    run.text = translated if i == 0 else ""
-                        done += 1
-
-    doc.save(str(docx_path))
-    logger.info("Translated %d paragraphs in DOCX", done)
-
-
-def _replace_images_in_docx(docx_path):
-    """Replace inline images in DOCX with [LOGOMARCA]/[CARIMBO] text."""
-    from docx import Document
-    from docx.oxml.ns import qn
-    from docx.oxml import OxmlElement
-    from lxml import etree
-    import copy
-
-    doc = Document(str(docx_path))
-    replaced = 0
-
-    for para in doc.paragraphs:
-        # Check if paragraph contains images (drawing elements)
-        drawings = para._p.findall('.//' + qn('w:drawing'))
-        if drawings:
-            # Remove image runs, replace with placeholder text
-            for run in para.runs:
-                if run._r.findall('.//' + qn('w:drawing')):
-                    # Determine label based on position (simple heuristic)
-                    run.text   = "[LOGOMARCA]"
-                    run.italic = True
-                    # Remove the drawing element
-                    for drawing in run._r.findall('.//' + qn('w:drawing')):
-                        run._r.remove(drawing)
-                    replaced += 1
-
-    doc.save(str(docx_path))
-    if replaced:
-        logger.info("Replaced %d images with placeholders in DOCX", replaced)
-
-
-#  FILE PROCESSOR 
-
-def process_file(file_info, out_dir, lang, image_mode, do_translate):
-    pdf = Path(file_info["upload_path"])
+    src    = Path(file_info["upload_path"])
     result = dict(file_info)
+
     try:
-        if not pdf.exists():
-            raise FileNotFoundError(str(pdf))
+        if not src.exists():
+            raise FileNotFoundError(str(src))
 
-        docx_name = pdf.stem + "_convertido.docx"
-        docx_path = out_dir / docx_name
+        out_stem = src.stem + "_convertido"
+        out_path = out_dir / out_stem  # extensão definida pelo motor
 
-        logger.info("Processing: %s -> %s", pdf.name, docx_name)
-        pdf_to_docx(pdf, docx_path, lang=lang,
-                    do_translate=do_translate, image_mode=image_mode)
+        logger.info("Processing [%s]: %s", engine.upper(), src.name)
 
-        if not docx_path.exists():
-            raise RuntimeError("DOCX not created: " + str(docx_path))
+        if engine == "datalab":
+            meta = convert_with_datalab(
+                src, out_path, lang=lang,
+                do_translate=do_translate,
+                output_format=datalab_output,
+                mode=datalab_mode,
+                image_mode=image_mode,
+            )
+        elif engine == "marker":
+            meta = convert_with_marker(
+                src, out_path, lang=lang,
+                do_translate=do_translate,
+                image_mode=image_mode,
+            )
+        else:
+            raise ValueError(f"Unknown engine: {engine}")
 
-        size_kb = docx_path.stat().st_size / 1024
-        logger.info("Done: %s (%.1f KB)", docx_name, size_kb)
+        final_path = Path(meta["output_path"])
+        if not final_path.exists():
+            raise RuntimeError(f"Output not created: {final_path}")
 
+        logger.info("Done: %s (%.1f KB)", meta["output_name"], meta["size_kb"])
         result.update({
-            "output_path":  str(docx_path),
-            "output_name":  docx_name,
-            "size_kb":      round(size_kb, 1),
-            "status":       "completed",
+            "output_path":       meta["output_path"],
+            "output_name":       meta["output_name"],
+            "size_kb":           meta["size_kb"],
+            "status":            "completed",
+            "progress":          100,
+            "pdf_type":          meta.get("pdf_type", "unknown"),
+            "chars_extracted":   meta.get("total_chars", 0),
+            "extraction_method": meta.get("extraction_method", engine),
+            "page_count":        meta.get("page_count", "?"),
+            "quality_score":     meta.get("quality_score", "?"),
         })
-        return result
 
     except Exception as e:
-        logger.error("Error processing %s: %s", file_info["name"], e)
-        result["error"]  = str(e)
-        result["status"] = "failed"
-        return result
+        logger.error("Error [%s] %s: %s", engine, file_info["name"], e)
+        result["error"]    = str(e)
+        result["status"]   = "failed"
+        result["progress"] = 100
+
+    return result
 
 
-async def run_job(job_id, lang, image_mode, do_translate):
+# ── Job runner com concorrência ───────────────────────────────────────────────
+
+async def run_job(job_id: str, lang: str, image_mode: str, do_translate: bool,
+                  engine: str, datalab_mode: str, datalab_output: str):
+
     job     = load_job(job_id)
     out_dir = OUTPUT_DIR / job_id
     out_dir.mkdir(parents=True, exist_ok=True)
+
     job["status"]     = "processing"
     job["started_at"] = datetime.now().isoformat()
+    for fi in job["files"]:
+        fi["status"] = "pending"; fi["progress"] = 0
     save_job(job)
 
-    loop = asyncio.get_event_loop()
-    for idx, fi in enumerate(job["files"]):
-        fi["status"] = "processing"
-        save_job(job)
+    loop  = asyncio.get_event_loop()
+    total = len(job["files"])
+    sem   = asyncio.Semaphore(MAX_CONCURRENT)
+    lock  = asyncio.Lock()
 
-        updated = await loop.run_in_executor(
-            None, process_file, fi, out_dir, lang, image_mode, do_translate)
+    async def process_one(idx, fi):
+        async with sem:
+            async with lock:
+                job["current_file"]            = fi["name"]
+                job["files"][idx]["status"]    = "processing"
+                job["files"][idx]["progress"]  = 10
+                save_job(job)
+            try:
+                import functools
+                fn = functools.partial(
+                    process_file, fi, out_dir, lang, image_mode, do_translate,
+                    engine, datalab_mode, datalab_output
+                )
+                updated = await asyncio.wait_for(
+                    loop.run_in_executor(None, fn),
+                    timeout=FILE_TIMEOUT_SECONDS
+                )
+            except asyncio.TimeoutError:
+                logger.error("Timeout: %s after %ds", fi["name"], FILE_TIMEOUT_SECONDS)
+                updated = dict(fi)
+                updated.update({"status": "failed", "progress": 100,
+                                 "error": f"Timeout após {FILE_TIMEOUT_SECONDS}s"})
+        async with lock:
+            job["files"][idx] = updated
+            if updated.get("status") == "completed":
+                job["processed"] += 1
+            else:
+                job["failed"] += 1
+            job["percentage"] = round(
+                (job["processed"] + job["failed"]) / total * 100, 1)
+            save_job(job)
 
-        job["files"][idx] = updated
-        if updated.get("status") == "completed":
-            job["processed"] += 1
-        else:
-            job["failed"] += 1
-        job["percentage"] = round(
-            (job["processed"] + job["failed"]) / job["total"] * 100, 1)
-        save_job(job)
-        await asyncio.sleep(0.1)
+    try:
+        await asyncio.gather(*[process_one(i, f) for i, f in enumerate(job["files"])])
+    except Exception as e:
+        logger.error("run_job gather error: %s", e)
 
-    # Create ZIP
+    # Criar ZIP
     zip_path = OUTPUT_DIR / (job_id + "_all.zip")
     added = 0
     with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
@@ -445,8 +673,7 @@ async def run_job(job_id, lang, image_mode, do_translate):
             if p and Path(p).exists():
                 zf.write(p, fi["output_name"])
                 added += 1
-
-    logger.info("ZIP: %d files, %.1f KB", added,
+    logger.info("ZIP: %d files (%.1f KB)", added,
                 zip_path.stat().st_size / 1024 if zip_path.exists() else 0)
 
     job["status"]       = "completed"
@@ -456,35 +683,48 @@ async def run_job(job_id, lang, image_mode, do_translate):
     save_job(job)
 
 
-#  ROUTES 
+# ── Rotas ─────────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
     index = STATIC_DIR / "index.html"
     if not index.exists():
-        return HTMLResponse(
-            "<h2>index.html not found</h2><p>Place in: <code>" + str(STATIC_DIR) + "</code></p>",
-            status_code=404)
+        return HTMLResponse(f"<h2>index.html not found</h2><p>{STATIC_DIR}</p>", status_code=404)
     return HTMLResponse(content=index.read_text(encoding="utf-8"))
 
 
 @app.get("/api/health")
 async def health():
     deps = {}
-    for lib, label in [("fitz", "PyMuPDF"), ("pytesseract", "Tesseract"),
-                        ("deep_translator", "deep-translator"),
-                        ("docx", "python-docx"), ("pdf2docx", "pdf2docx")]:
+    checks = [
+        ("marker",         "Marker local"),
+        ("deep_translator","deep-translator"),
+        ("docx",           "python-docx"),
+        ("fitz",           "PyMuPDF"),
+        ("pdf2docx",       "pdf2docx"),
+        ("bs4",            "beautifulsoup4"),
+        ("openpyxl",       "openpyxl"),
+        ("pptx",           "python-pptx"),
+    ]
+    for lib, label in checks:
         try:
             __import__(lib)
             deps[label] = "ok"
         except ImportError:
             deps[label] = "not installed"
+
+    # Verificar markdown_to_docx.py
+    deps["markdown_to_docx"] = "ok" if (BASE_DIR / "markdown_to_docx.py").exists() else "not found"
+    # Verificar chave Datalab
+    deps["Datalab API key"]  = "ok" if DATALAB_API_KEY else "not set"
+
     return {
-        "status": "ok",
-        "base_dir":    str(BASE_DIR),
-        "output_dir":  str(OUTPUT_DIR),
-        "index_html_exists": (STATIC_DIR / "index.html").exists(),
+        "status":       "ok",
+        "version":      "7.0.0",
+        "base_dir":     str(BASE_DIR),
         "dependencies": deps,
+        "engines":      ["datalab", "marker"],
+        "datalab_key":  "configured" if DATALAB_API_KEY else "missing",
     }
 
 
@@ -493,64 +733,124 @@ async def upload_files(files: List[UploadFile] = File(...)):
     job_id = str(uuid.uuid4())
     up_dir = UPLOAD_DIR / job_id
     up_dir.mkdir(parents=True, exist_ok=True)
-    pdfs   = []
+    accepted = []
 
     for upload in files:
-        filename  = upload.filename or ("file_" + str(uuid.uuid4()) + ".pdf")
-        safe_name = "".join(c for c in filename
-                            if c.isalnum() or c in "._- ()").strip() or "file.pdf"
-        dest    = up_dir / safe_name
-        content = await upload.read()
-        dest.write_bytes(content)
+        filename  = upload.filename or "file"
+        safe_name = sanitize_filename(filename)
+        dest      = up_dir / safe_name
+        content   = await upload.read()
 
-        if safe_name.lower().endswith(".zip"):
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, f"{safe_name} é demasiado grande (max 100MB)")
+        dest.write_bytes(content)
+        ext = dest.suffix.lower()
+
+        if ext == ".zip":
             try:
                 with zipfile.ZipFile(str(dest)) as zf:
-                    for name in zf.namelist():
-                        if name.lower().endswith(".pdf") and not name.startswith("__MACOSX"):
-                            ep = up_dir / Path(name).name
-                            ep.write_bytes(zf.read(name))
-                            pdfs.append({"id": str(uuid.uuid4()), "name": ep.name,
-                                         "size": ep.stat().st_size,
-                                         "upload_path": str(ep), "status": "pending"})
+                    pdf_infos = [
+                        i for i in zf.infolist()
+                        if i.filename.lower().endswith(".pdf")
+                        and not i.filename.startswith("__MACOSX")
+                        and not i.is_dir()
+                    ]
+                    if len(pdf_infos) > MAX_ZIP_MEMBERS:
+                        raise HTTPException(413, f"{safe_name} tem demasiados PDFs")
+                    if sum(i.file_size for i in pdf_infos) > MAX_ZIP_TOTAL_BYTES:
+                        raise HTTPException(413, f"{safe_name} é demasiado grande após extracção")
+                    for info in pdf_infos:
+                        ep_name = sanitize_filename(Path(info.filename).name)
+                        ep = up_dir / ep_name
+                        if ep.exists():
+                            ep = up_dir / (str(uuid.uuid4())[:8] + "_" + ep_name)
+                        ep.write_bytes(zf.read(info))
+                        accepted.append({
+                            "id": str(uuid.uuid4()), "name": ep.name,
+                            "size": ep.stat().st_size, "type": "pdf",
+                            "upload_path": str(ep), "status": "pending", "progress": 0
+                        })
                 dest.unlink()
             except zipfile.BadZipFile:
-                raise HTTPException(400, safe_name + " is not a valid ZIP")
-        elif safe_name.lower().endswith(".pdf"):
-            pdfs.append({"id": str(uuid.uuid4()), "name": safe_name,
-                         "size": len(content), "upload_path": str(dest), "status": "pending"})
+                raise HTTPException(400, f"{safe_name} não é um ZIP válido")
+        elif ext == ".pdf":
+            accepted.append({
+                "id": str(uuid.uuid4()), "name": safe_name,
+                "size": len(content), "type": "pdf",
+                "upload_path": str(dest), "status": "pending", "progress": 0
+            })
 
-    if not pdfs:
-        raise HTTPException(400, "No PDF found.")
+    if not accepted:
+        raise HTTPException(400, "Nenhum PDF encontrado. Envie ficheiros .pdf ou .zip com PDFs.")
 
-    job = {"job_id": job_id, "status": "pending", "total": len(pdfs),
-           "processed": 0, "failed": 0, "percentage": 0.0, "files": pdfs,
-           "created_at": datetime.now().isoformat(),
-           "target_language": "pt", "image_mode": "placeholder"}
+    job = {
+        "job_id": job_id, "status": "pending",
+        "total": len(accepted), "processed": 0, "failed": 0,
+        "percentage": 0.0, "current_file": "",
+        "files": accepted,
+        "created_at": datetime.now().isoformat(),
+        "target_language": "pt", "image_mode": "placeholder",
+        "engine": "datalab",
+    }
     save_job(job)
-    return {"job_id": job_id, "files_count": len(pdfs), "files": pdfs}
+    return {"job_id": job_id, "files_count": len(accepted), "files": accepted}
 
 
 @app.post("/api/process")
 async def start_processing(req: ProcessRequest, background_tasks: BackgroundTasks):
     job = load_job(req.job_id)
     if job["status"] == "processing":
-        raise HTTPException(400, "Already processing")
+        raise HTTPException(400, "Já em processamento")
 
-    # do_translate = False if language is "none" or "original"
     do_translate = req.target_language not in ("none", "original", "")
     image_mode   = "remove" if req.remove_images else req.image_mode
 
-    job.update({"target_language": req.target_language, "image_mode": image_mode,
-                "status": "processing", "processed": 0, "failed": 0, "percentage": 0.0})
+    job.update({
+        "target_language": req.target_language,
+        "image_mode":      image_mode,
+        "engine":          req.engine,
+        "datalab_mode":    req.datalab_mode,
+        "datalab_output":  req.datalab_output,
+        "status":          "processing",
+        "processed":       0,
+        "failed":          0,
+        "percentage":      0.0,
+    })
     for f in job["files"]:
         f["status"] = "pending"
     save_job(job)
 
-    background_tasks.add_task(run_job, req.job_id, req.target_language,
-                              image_mode, do_translate)
+    background_tasks.add_task(
+        run_job, req.job_id, req.target_language,
+        image_mode, do_translate,
+        req.engine, req.datalab_mode, req.datalab_output
+    )
     return {"status": "started", "job_id": req.job_id}
 
+
+
+@app.get("/api/languages")
+async def get_languages():
+    return {
+        "af":"Afrikaans","sq":"Albanês","am":"Amárico","ar":"Árabe","hy":"Arménio",
+        "az":"Azerbaijanês","eu":"Basco","be":"Bielorusso","bn":"Bengalês","bs":"Bósnio",
+        "bg":"Búlgaro","ca":"Catalão","zh-cn":"Chinês Simplificado","zh-tw":"Chinês Tradicional",
+        "hr":"Croata","cs":"Checo","da":"Dinamarquês","nl":"Neerlandês","en":"Inglês",
+        "et":"Estoniano","tl":"Filipino","fi":"Finlandês","fr":"Francês","gl":"Galego",
+        "ka":"Georgiano","de":"Alemão","el":"Grego","gu":"Gujarati","ht":"Haitiano",
+        "ha":"Hauça","iw":"Hebraico","hi":"Hindi","hu":"Húngaro","is":"Islandês",
+        "ig":"Igbo","id":"Indonésio","ga":"Irlandês","it":"Italiano","ja":"Japonês",
+        "jw":"Javanês","kn":"Canarês","kk":"Cazaque","km":"Khmer","ko":"Coreano",
+        "ku":"Curdo","ky":"Quirguiz","lo":"Laociano","la":"Latim","lv":"Letão",
+        "lt":"Lituano","mk":"Macedônio","ms":"Malaio","ml":"Malaiala","mt":"Maltês",
+        "mi":"Maori","mr":"Marata","mn":"Mongol","my":"Birmanês","ne":"Nepalês",
+        "no":"Norueguês","ps":"Pashto","fa":"Persa","pl":"Polaco","pt":"Português",
+        "pa":"Punjabi","ro":"Romeno","ru":"Russo","sm":"Samoano","sr":"Sérvio",
+        "si":"Cingalês","sk":"Eslovaco","sl":"Esloveno","so":"Somali","es":"Espanhol",
+        "sw":"Suaíli","sv":"Sueco","tg":"Tajique","ta":"Tâmil","te":"Telugu",
+        "th":"Tailandês","tr":"Turco","uk":"Ucraniano","ur":"Urdu","uz":"Uzbeque",
+        "vi":"Vietnamita","cy":"Galês","xh":"Xhosa","yi":"Iídiche","yo":"Ioruba","zu":"Zulu"
+    }
 
 @app.get("/api/jobs/{job_id}")
 async def get_job(job_id: str):
@@ -562,29 +862,13 @@ async def get_all_jobs():
     return list_jobs()
 
 
-@app.get("/api/outputs/{job_id}")
-async def list_outputs(job_id: str):
-    job     = load_job(job_id)
-    out_dir = OUTPUT_DIR / job_id
-    files   = []
-    if out_dir.exists():
-        for f in sorted(out_dir.iterdir()):
-            if f.suffix in (".docx", ".pdf"):
-                files.append({"name": f.name, "path": str(f),
-                               "size_kb": round(f.stat().st_size / 1024, 1)})
-    return {"job_id": job_id, "output_dir": str(out_dir), "files": files,
-            "job_files": [{"name": fi.get("name"), "output_path": fi.get("output_path",""),
-                           "output_name": fi.get("output_name",""), "status": fi.get("status"),
-                           "error": fi.get("error","")} for fi in job.get("files",[])]}
-
-
 @app.get("/api/download/{job_id}/zip")
 async def download_zip(job_id: str):
     job = load_job(job_id)
     zp  = Path(job.get("zip_path", ""))
     if not zp.exists():
-        raise HTTPException(404, "ZIP not ready yet")
-    return FileResponse(str(zp), filename="conversao_" + job_id[:8] + ".zip",
+        raise HTTPException(404, "ZIP não pronto ainda")
+    return FileResponse(str(zp), filename=f"traducao_{job_id[:8]}.zip",
                         media_type="application/zip")
 
 
@@ -593,12 +877,21 @@ async def download_file(job_id: str, file_id: str):
     job = load_job(job_id)
     fi  = next((f for f in job["files"] if f["id"] == file_id), None)
     if not fi:
-        raise HTTPException(404, "File not found")
+        raise HTTPException(404, "Ficheiro não encontrado")
     op = Path(fi.get("output_path", ""))
     if not op.exists():
-        raise HTTPException(404, "DOCX not ready yet")
+        raise HTTPException(404, "Ficheiro não pronto")
+    ext = op.suffix.lower()
+    MIME = {
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".pdf":  "application/pdf",
+        ".md":   "text/markdown",
+        ".html": "text/html",
+        ".json": "application/json",
+        ".txt":  "text/plain",
+    }
     return FileResponse(str(op), filename=fi["output_name"],
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                        media_type=MIME.get(ext, "application/octet-stream"))
 
 
 @app.delete("/api/jobs/{job_id}")
@@ -616,5 +909,4 @@ async def delete_job(job_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True,
-                reload_dirs=[str(BASE_DIR)])
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)

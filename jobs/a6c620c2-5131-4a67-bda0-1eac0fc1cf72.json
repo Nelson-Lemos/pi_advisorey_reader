@@ -1,0 +1,38 @@
+{
+  "job_id": "a6c620c2-5131-4a67-bda0-1eac0fc1cf72",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "current_file": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+  "files": [
+    {
+      "id": "a94ebb37-609d-4153-acbc-f4bf2e93cdda",
+      "name": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "size": 28541283,
+      "type": "pdf",
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\uploads\\a6c620c2-5131-4a67-bda0-1eac0fc1cf72\\1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "status": "completed",
+      "progress": 100,
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\a6c620c2-5131-4a67-bda0-1eac0fc1cf72\\1 Technical Part - Volume 1_parte_03_pp201-300_convertido.docx",
+      "output_name": "1 Technical Part - Volume 1_parte_03_pp201-300_convertido.docx",
+      "size_kb": 143.1,
+      "pdf_type": "scanned",
+      "chars_extracted": 494246,
+      "extraction_method": "datalab_marker",
+      "page_count": 100,
+      "quality_score": null
+    }
+  ],
+  "created_at": "2026-06-03T12:31:54.096052",
+  "target_language": "none",
+  "image_mode": "placeholder",
+  "engine": "datalab",
+  "datalab_mode": "balanced",
+  "datalab_output": "markdown",
+  "started_at": "2026-06-03T12:31:54.191939",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\a6c620c2-5131-4a67-bda0-1eac0fc1cf72_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\a6c620c2-5131-4a67-bda0-1eac0fc1cf72",
+  "completed_at": "2026-06-03T12:33:39.551335"
+}

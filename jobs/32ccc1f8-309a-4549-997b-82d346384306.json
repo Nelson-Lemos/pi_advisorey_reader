@@ -1,0 +1,31 @@
+{
+  "job_id": "32ccc1f8-309a-4549-997b-82d346384306",
+  "status": "completed",
+  "total": 1,
+  "processed": 0,
+  "failed": 1,
+  "percentage": 100.0,
+  "current_file": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+  "files": [
+    {
+      "id": "aacccefd-7c4c-4155-8f47-d43175c13c46",
+      "name": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "size": 28541283,
+      "type": "pdf",
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\uploads\\32ccc1f8-309a-4549-997b-82d346384306\\1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "status": "failed",
+      "progress": 100,
+      "error": "No module named 'requests'"
+    }
+  ],
+  "created_at": "2026-06-03T11:51:02.348754",
+  "target_language": "pt",
+  "image_mode": "placeholder",
+  "engine": "datalab",
+  "datalab_mode": "balanced",
+  "datalab_output": "markdown",
+  "started_at": "2026-06-03T11:51:02.445565",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\32ccc1f8-309a-4549-997b-82d346384306_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\32ccc1f8-309a-4549-997b-82d346384306",
+  "completed_at": "2026-06-03T11:51:02.611589"
+}

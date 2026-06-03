@@ -1,0 +1,27 @@
+{
+  "job_id": "08bfaac1-fda7-42b2-a907-013572e97cc9",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "d0beb568-edd2-47c3-b81e-378afe2fdc49",
+      "name": "Lista dos formandos - 7º dia.pdf",
+      "size": 438674,
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\uploads\\08bfaac1-fda7-42b2-a907-013572e97cc9\\Lista dos formandos - 7º dia.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\08bfaac1-fda7-42b2-a907-013572e97cc9\\Lista dos formandos - 7º dia_convertido.docx",
+      "output_name": "Lista dos formandos - 7º dia_convertido.docx",
+      "size_kb": 98.3
+    }
+  ],
+  "created_at": "2026-06-03T09:23:15.338937",
+  "target_language": "none",
+  "image_mode": "placeholder",
+  "started_at": "2026-06-03T09:23:15.461409",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\08bfaac1-fda7-42b2-a907-013572e97cc9_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\08bfaac1-fda7-42b2-a907-013572e97cc9",
+  "completed_at": "2026-06-03T09:23:24.238906"
+}

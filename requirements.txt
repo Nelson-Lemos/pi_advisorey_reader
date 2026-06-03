@@ -1,19 +1,13 @@
-# PDF Translator Pro - Python Dependencies
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
-python-multipart==0.0.9
-aiofiles==23.2.1
-pydantic==2.7.1
-
-# PDF Processing
-PyMuPDF==1.24.2          # fitz - fast PDF text extraction
-pdfminer.six==20221105   # fallback text extraction
-python-docx==1.1.2       # DOCX generation
-Pillow==10.3.0           # image processing
-
-# OCR (optional - requires Tesseract installed on OS)
-pytesseract==0.3.10
-
-# Translation
-deep-translator==1.11.4  # Primary: Google Translate (free)
-# googletrans==4.0.0rc1  # Fallback option
+fastapi
+uvicorn[standard]
+python-multipart
+deep-translator
+pymupdf
+pdf2docx
+python-docx
+openpyxl
+python-pptx
+beautifulsoup4
+Pillow
+pytesseract
+lxml

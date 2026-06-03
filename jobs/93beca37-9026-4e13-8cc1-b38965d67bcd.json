@@ -1,0 +1,31 @@
+{
+  "job_id": "93beca37-9026-4e13-8cc1-b38965d67bcd",
+  "status": "completed",
+  "total": 1,
+  "processed": 0,
+  "failed": 1,
+  "percentage": 100.0,
+  "current_file": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+  "files": [
+    {
+      "id": "43045a2d-d061-464f-8c16-7afa1f926722",
+      "name": "1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "size": 28541283,
+      "type": "pdf",
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\uploads\\93beca37-9026-4e13-8cc1-b38965d67bcd\\1 Technical Part - Volume 1_parte_03_pp201-300.pdf",
+      "status": "failed",
+      "progress": 100,
+      "error": "('Connection aborted.', TimeoutError('The write operation timed out'))"
+    }
+  ],
+  "created_at": "2026-06-03T12:13:21.041511",
+  "target_language": "none",
+  "image_mode": "placeholder",
+  "engine": "datalab",
+  "datalab_mode": "balanced",
+  "datalab_output": "markdown",
+  "started_at": "2026-06-03T12:13:21.166382",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\93beca37-9026-4e13-8cc1-b38965d67bcd_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\93beca37-9026-4e13-8cc1-b38965d67bcd",
+  "completed_at": "2026-06-03T12:14:24.203746"
+}

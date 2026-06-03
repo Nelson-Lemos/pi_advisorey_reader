@@ -1,0 +1,23 @@
+{
+  "job_id": "a7242237-4e32-4e6d-b10d-821335bd0e64",
+  "status": "processing",
+  "total": 1,
+  "processed": 0,
+  "failed": 0,
+  "percentage": 0.0,
+  "files": [
+    {
+      "id": "0f78c904-f207-4c6f-ac9f-057e22664911",
+      "name": "1 Techincal new.pdf",
+      "size": 418456,
+      "type": "pdf",
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\uploads\\a7242237-4e32-4e6d-b10d-821335bd0e64\\1 Techincal new.pdf",
+      "status": "processing"
+    }
+  ],
+  "created_at": "2026-06-03T10:01:30.641176",
+  "target_language": "pt",
+  "image_mode": "placeholder",
+  "output_format": "docx",
+  "started_at": "2026-06-03T10:01:30.734253"
+}

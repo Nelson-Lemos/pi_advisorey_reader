@@ -1,0 +1,29 @@
+{
+  "job_id": "1d19b631-51d9-4226-a7fe-65ebb0d457a3",
+  "status": "completed",
+  "total": 1,
+  "processed": 1,
+  "failed": 0,
+  "percentage": 100.0,
+  "files": [
+    {
+      "id": "03141fb2-c4f5-4a1e-a839-d9e109059695",
+      "name": "1 Techincal new.pdf",
+      "size": 418456,
+      "type": "pdf",
+      "upload_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\uploads\\1d19b631-51d9-4226-a7fe-65ebb0d457a3\\1 Techincal new.pdf",
+      "status": "completed",
+      "output_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\1d19b631-51d9-4226-a7fe-65ebb0d457a3\\1 Techincal new_traduzido.docx",
+      "output_name": "1 Techincal new_traduzido.docx",
+      "size_kb": 67.8
+    }
+  ],
+  "created_at": "2026-06-03T10:22:35.827340",
+  "target_language": "pt",
+  "image_mode": "placeholder",
+  "output_format": "same",
+  "started_at": "2026-06-03T10:22:35.956909",
+  "zip_path": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\1d19b631-51d9-4226-a7fe-65ebb0d457a3_all.zip",
+  "output_dir": "C:\\Users\\HP ZBOOK 15 G3\\Desktop\\Py\\pi_advisorey_reader\\outputs\\1d19b631-51d9-4226-a7fe-65ebb0d457a3",
+  "completed_at": "2026-06-03T10:35:32.866591"
+}
