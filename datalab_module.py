@@ -400,9 +400,15 @@ def convert_with_datalab(
             logger.info("Datalab: tradução completa")
 
     # ── 6. Guardar ficheiro ───────────────────────────────────────────────────
-    # Se output é markdown, tentar converter directamente para DOCX
+    # Guardar SEMPRE o raw markdown (e também DOCX se for markdown)
+    md_path = None
     saved_as_docx = False
     if output_format == "markdown":
+        # Guardar raw markdown primeiro
+        md_path = out_path.with_suffix(".md")
+        md_path.write_text(text_content, encoding="utf-8")
+        logger.info("Datalab: raw markdown → %s (%.1f KB)", md_path.name, len(text_content) / 1024)
+        # Tentar converter para DOCX
         try:
             from markdown_to_docx import markdown_to_docx as _md2docx
             docx_path = out_path.with_suffix(".docx")
@@ -423,11 +429,11 @@ def convert_with_datalab(
             logger.info("markdown_to_docx.py não encontrado — guardando como .md")
         except Exception as e:
             logger.warning("markdown_to_docx falhou (%s) — guardando como .md", e)
-
-    if not saved_as_docx:
-        ext_map  = {"markdown": ".md", "html": ".html", "json": ".json"}
-        out_path = out_path.with_suffix(ext_map.get(output_format, ".md"))
-        out_path.write_text(text_content, encoding="utf-8")
+    else:
+        if not saved_as_docx:
+            ext_map = {"html": ".html", "json": ".json"}
+            out_path = out_path.with_suffix(ext_map.get(output_format, ".md"))
+            out_path.write_text(text_content, encoding="utf-8")
 
     size_kb = out_path.stat().st_size / 1024
     logger.info("Datalab: guardado → %s (%.1f KB)", out_path.name, size_kb)
