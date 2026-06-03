@@ -1,18 +1,10 @@
-# -*- coding: utf-8 -*-
-"""
-PDF Translator Pro v5.0
-- Fiel ao documento original (tabelas, paragrafos, fontes, numeracao)
-- Traduz apenas o texto (se pedido)
-- Imagens substituidas por [LOGOMARCA] ou [CARIMBO]
-"""
-
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
-import uuid, json, zipfile, shutil, asyncio
+import uuid, json, zipfile, shutil, asyncio, re, time, io
 from pathlib import Path
 from datetime import datetime
 import logging
@@ -22,10 +14,14 @@ logger = logging.getLogger(__name__)
 
 MAX_CONCURRENT = 4
 TRANSLATE_TIMEOUT = 30
+FILE_TIMEOUT_SECONDS = 180
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+MAX_ZIP_MEMBERS = 100
+MAX_ZIP_TOTAL_BYTES = 100 * 1024 * 1024
 
 _translation_cache: dict = {}
 
-app = FastAPI(title="PDF Translator Pro", version="5.0.0")
+app = FastAPI(title="PDF Tradutor Pro", version="6.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
@@ -38,9 +34,6 @@ JOBS_DIR   = BASE_DIR / "jobs"
 for d in [STATIC_DIR, UPLOAD_DIR, OUTPUT_DIR, JOBS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-logger.info("BASE_DIR: %s", BASE_DIR)
-logger.info("index.html exists: %s", (STATIC_DIR / "index.html").exists())
-
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
@@ -48,7 +41,6 @@ class ProcessRequest(BaseModel):
     job_id: str
     target_language: str = "pt"
     image_mode: str      = "placeholder"
-    output_pdf: bool     = False
     remove_images: bool  = False
 
 
@@ -74,13 +66,16 @@ def list_jobs(limit=50):
     return out
 
 
-#  TRANSLATION 
+def sanitize_filename(filename):
+    return "".join(c for c in filename if c.isalnum() or c in "._- ()").strip() or "file.pdf"
 
-def translate_text(text, lang, translator, retry=0):
+
+def translate_text(text, lang, translator, retry=0, cache=None):
     if not text or not text.strip():
         return text
+    cache = _translation_cache if cache is None else cache
     cache_key = (text, lang)
-    cached = _translation_cache.get(cache_key)
+    cached = cache.get(cache_key)
     if cached is not None:
         return cached
     try:
@@ -88,7 +83,7 @@ def translate_text(text, lang, translator, retry=0):
         if len(text) <= MAX:
             r = translator.translate(text, timeout=TRANSLATE_TIMEOUT)
             result = r.strip() if r else text
-            _translation_cache[cache_key] = result
+            cache[cache_key] = result
             return result
         parts, buf = [], ""
         for sentence in text.replace(". ", ".|||").split("|||"):
@@ -103,373 +98,109 @@ def translate_text(text, lang, translator, retry=0):
             r = translator.translate(buf, timeout=TRANSLATE_TIMEOUT)
             parts.append(r.strip() if r else buf)
         result = " ".join(parts)
-        _translation_cache[cache_key] = result
+        cache[cache_key] = result
         return result
     except Exception as e:
-        import time
         msg = str(e)
         if "429" in msg or "TooMany" in msg:
             wait = min(4 * (2 ** retry), 60)
             logger.warning("rate limited, waiting %ds (retry %d)", wait, retry)
             time.sleep(wait)
             if retry < 3:
-                return translate_text(text, lang, translator, retry=retry + 1)
+                return translate_text(text, lang, translator, retry=retry + 1, cache=cache)
             else:
-                logger.warning("max retries exceeded for text")
+                logger.warning("max retries exceeded")
                 return text
         logger.warning("translate error: %s", e)
         return text
 
 
-#  IMAGE CLASSIFICATION 
+def translate_markdown(markdown_text, lang, translator):
+    lines = markdown_text.split("\n")
+    translated_lines = []
+    in_code_block = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            translated_lines.append(line)
+            continue
+        if in_code_block:
+            translated_lines.append(line)
+            continue
+        if stripped.startswith("#") or stripped.startswith(">") or stripped.startswith("```"):
+            translated_lines.append(line)
+            continue
+        if stripped.startswith("!["):
+            translated_lines.append(line)
+            continue
+        if re.match(r'^[\-\*\+]\s', stripped) or re.match(r'^\d+[\.\)]\s', stripped):
+            translated_lines.append(line)
+            continue
+        if "|" in stripped and re.match(r'^[\s\|:\-a-zA-Z0-9]+$', stripped):
+            translated_lines.append(line)
+            continue
+        if stripped == "---" or stripped == "***":
+            translated_lines.append(line)
+            continue
+        if not stripped:
+            translated_lines.append(line)
+            continue
+        translated = translate_text(stripped, lang, translator)
+        if translated and translated != stripped:
+            indent = line[:len(line) - len(line.lstrip())]
+            translated_lines.append(indent + translated)
+        else:
+            translated_lines.append(line)
+    return "\n".join(translated_lines)
 
-def classify_image(bbox, page_w, page_h):
-    x0, y0, x1, y1 = bbox
-    w = x1 - x0
-    h = y1 - y0
-    area_ratio = (w * h) / max(page_w * page_h, 1)
-    aspect = w / max(h, 1)
-    in_header = y0 < page_h * 0.20
-    in_footer = y1 > page_h * 0.80
-    is_small  = area_ratio < 0.10
-    is_square = 0.5 < aspect < 2.0
 
-    if is_small and (in_header or in_footer):
-        return "[LOGOMARCA]"
-    if is_small and is_square:
-        return "[CARIMBO]"
-    return "[FIGURA]"
+def convert_pdf_to_docx(pdf_path, docx_path, lang="pt", do_translate=True, image_mode="placeholder"):
+    logger.info("Converting PDF to Markdown via Marker: %s", pdf_path.name)
 
+    from marker.converters.pdf import PdfConverter
+    from marker.models import create_model_dict
+    from marker.output import text_from_rendered
 
-#  CORE: PDF -> DOCX with faithful structure 
+    converter = PdfConverter(
+        artifact_dict=create_model_dict(),
+    )
+    rendered = converter(str(pdf_path))
+    markdown_text, metadata, images_by_block = text_from_rendered(rendered)
 
-def pdf_to_docx(pdf_path, docx_path, lang="pt", do_translate=True, image_mode="placeholder"):
-    """
-    Convert PDF to DOCX preserving 100% of the structure.
-    Uses pdf2docx for faithful conversion, then post-processes for translation.
-    Falls back to manual block reconstruction if pdf2docx unavailable.
-    """
-    import fitz
-    from docx import Document
-    from docx.shared import Pt, RGBColor, Cm, Inches
-    from docx.oxml.ns import qn
-    from docx.oxml import OxmlElement
+    total_chars = len(markdown_text)
+    logger.info("Marker extracted %d chars", total_chars)
 
-    # Setup translator
-    translator = None
-    if do_translate and lang not in ("", "none"):
-        try:
-            from deep_translator import GoogleTranslator
-            translator = GoogleTranslator(source="auto", target=lang)
-        except ImportError:
-            logger.warning("deep_translator not installed")
+    image_mode_effective = "remove" if image_mode == "remove" else image_mode
 
-    #  Try pdf2docx first (best fidelity) 
-    try:
-        from pdf2docx import Converter
-        logger.info("Using pdf2docx for faithful conversion...")
-        cv = Converter(str(pdf_path))
-        cv.convert(str(docx_path), start=0, end=None)
-        cv.close()
-        logger.info("pdf2docx conversion done")
+    if do_translate and lang not in ("", "none", "original"):
+        from deep_translator import GoogleTranslator
+        translator = GoogleTranslator(source="auto", target=lang)
+        markdown_text = translate_markdown(markdown_text, lang, translator)
+        logger.info("Translation done")
 
-        if do_translate and translator:
-            logger.info("Post-processing: translating text in DOCX...")
-            _translate_docx_inplace(docx_path, translator, lang)
-            logger.info("Translation done")
-
-        # Handle images in the converted DOCX
-        if image_mode == "placeholder":
-            _replace_images_in_docx(docx_path)
-        elif image_mode == "remove":
-            _remove_images_from_docx(docx_path)
-
-        return
-
-    except ImportError:
-        logger.info("pdf2docx not available, using manual reconstruction...")
-    except Exception as e:
-        logger.warning("pdf2docx failed (%s), falling back...", e)
-
-    #  Fallback: manual block-by-block reconstruction 
-    logger.info("Manual PDF->DOCX reconstruction...")
-
-    doc_pdf = fitz.open(str(pdf_path))
-
-    # Phase 1: Extract all elements (text + images) with their metadata
-    pages_content = []
-    for pn, page in enumerate(doc_pdf):
-        pw = page.rect.width
-        ph = page.rect.height
-        blocks = sorted(page.get_text("dict")["blocks"],
-                        key=lambda b: (round(b["bbox"][1] / 10) * 10, b["bbox"][0]))
-        page_els = []
-        for block in blocks:
-            btype = block["type"]
-
-            if btype == 1:
-                if image_mode == "remove":
-                    continue
-                label = classify_image(block["bbox"], pw, ph)
-                page_els.append(("image", {"label": label}))
-                continue
-
-            if btype != 0:
-                continue
-
-            lines = block.get("lines", [])
-            if not lines:
-                continue
-
-            line_texts = []
-            for line in lines:
-                spans = line.get("spans", [])
-                line_text = "".join(s.get("text", "") for s in spans)
-                if line_text.strip():
-                    line_texts.append(line_text)
-
-            if not line_texts:
-                continue
-
-            full_text = " ".join(t.strip() for t in line_texts if t.strip())
-            if not full_text:
-                continue
-
-            dom_size, dom_bold, dom_italic, dom_font = 11.0, False, False, "Calibri"
-            for line in lines:
-                for span in line.get("spans", []):
-                    if span.get("text", "").strip():
-                        dom_size   = span.get("size", 11.0)
-                        dom_bold   = bool(span.get("flags", 0) & 16)
-                        dom_italic = bool(span.get("flags", 0) & 2)
-                        dom_font   = span.get("font", "Calibri")
-                        break
-                else:
-                    continue
-                break
-
-            font_pt = min(max(round(dom_size), 6), 72)
-            page_els.append(("text", {
-                "text": full_text, "size": dom_size, "bold": dom_bold,
-                "italic": dom_italic, "font": dom_font, "font_pt": font_pt
-            }))
-
-        pages_content.append(page_els)
-
-    doc_pdf.close()
-
-    # Phase 2: Translate all unique texts sequentially (avoid rate limit)
-    if translator:
-        import time
-        all_texts = []
-        for page_els in pages_content:
-            for el_type, el_data in page_els:
-                if el_type == "text" and el_data["text"].strip():
-                    all_texts.append(el_data["text"])
-        unique_texts = list(dict.fromkeys(all_texts))
-        translated_map = {}
-
-        for t in unique_texts:
-            key = (t, lang)
-            if key not in _translation_cache:
-                translate_text(t, lang, translator)
-                time.sleep(0.1)
-            translated_map[t] = _translation_cache.get(key, t)
+    if image_mode_effective == "remove":
+        markdown_text = re.sub(r'!\[[^\]]*\]\([^)]+\)', "", markdown_text)
+        images_used = {}
+    elif image_mode_effective == "placeholder":
+        def _replace_img(m):
+            alt = m.group(1) or "IMAGEM"
+            return f"[{alt}]"
+        markdown_text = re.sub(r'!\[([^\]]*)\]\([^)]+\)', _replace_img, markdown_text)
+        images_used = {}
     else:
-        translated_map = {}
+        images_used = images_by_block
 
-    # Phase 3: Build DOCX with pre-translated texts
-    doc_out = Document()
-    for sec in doc_out.sections:
-        sec.top_margin    = Cm(2.54)
-        sec.bottom_margin = Cm(2.54)
-        sec.left_margin   = Cm(3.17)
-        sec.right_margin  = Cm(3.17)
+    from markdown_to_docx import markdown_to_docx
+    markdown_to_docx(markdown_text, str(docx_path), images_dict=images_used)
 
-    for pn, page_els in enumerate(pages_content):
-        if pn > 0:
-            doc_out.add_page_break()
+    logger.info("DOCX created: %s", docx_path.name)
+    return {
+        "total_chars": total_chars,
+        "extraction_method": "marker",
+        "pdf_type": "scanned" if total_chars > 0 else "text",
+    }
 
-        for el_type, el_data in page_els:
-            if el_type == "image":
-                p = doc_out.add_paragraph()
-                run = p.add_run(el_data["label"])
-                run.font.size      = Pt(9)
-                run.font.italic    = True
-                run.font.color.rgb = RGBColor(0x77, 0x77, 0x77)
-                pPr = p._p.get_or_add_pPr()
-                shd = OxmlElement("w:shd")
-                shd.set(qn("w:val"), "clear")
-                shd.set(qn("w:color"), "auto")
-                shd.set(qn("w:fill"), "F2F2F2")
-                pPr.append(shd)
-                p.paragraph_format.space_before = Pt(2)
-                p.paragraph_format.space_after  = Pt(2)
-                continue
-
-            if el_type != "text":
-                continue
-
-            text = translated_map.get(el_data["text"], el_data["text"])
-            is_heading = (el_data["font_pt"] >= 14 or (el_data["font_pt"] >= 12 and el_data["bold"])) \
-                         and len(text) < 200
-
-            if is_heading:
-                level = 1 if el_data["font_pt"] >= 20 else (2 if el_data["font_pt"] >= 16 else 3)
-                p = doc_out.add_heading(text, level=level)
-            else:
-                p   = doc_out.add_paragraph()
-                run = p.add_run(text)
-                run.bold      = el_data["bold"]
-                run.italic    = el_data["italic"]
-                run.font.size = Pt(el_data["font_pt"])
-                try:
-                    font_name = el_data["font"]
-                    run.font.name = font_name.split("+")[-1] if "+" in font_name else font_name
-                except Exception:
-                    pass
-
-            p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after  = Pt(round(el_data["size"] * 0.3))
-
-    doc_out.save(str(docx_path))
-    total_els = sum(len(pe) for pe in pages_content)
-    logger.info("Manual reconstruction done: %d elements", total_els)
-
-
-def _translate_docx_inplace(docx_path, translator, lang):
-    """Translate all text in an existing DOCX file in-place."""
-    from docx import Document
-    import time
-
-    doc = Document(str(docx_path))
-
-    # Phase 1: Collect all unique texts that need translation
-    texts_to_translate = set()
-    for para in doc.paragraphs:
-        if para.text.strip():
-            texts_to_translate.add(para.text)
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    if para.text.strip():
-                        texts_to_translate.add(para.text)
-
-    # Phase 2: Pre-translate all unique texts sequentially (avoid rate limit)
-    translated = 0
-    for t in texts_to_translate:
-        key = (t, lang)
-        if key not in _translation_cache:
-            try:
-                translate_text(t, lang, translator)
-                translated += 1
-            except Exception as e:
-                logger.warning("translate_text error: %s", e)
-            time.sleep(0.1)
-
-    # Phase 3: Apply translations
-    done = 0
-    errors = 0
-    for para in doc.paragraphs:
-        try:
-            if para.text.strip():
-                cached = _translation_cache.get((para.text, lang))
-                translated = cached if cached is not None else para.text
-                if translated != para.text:
-                    if len(para.runs) >= 1:
-                        para.runs[0].text = translated
-                        for run in para.runs[1:]:
-                            run.text = ""
-                done += 1
-        except Exception as e:
-            errors += 1
-            logger.warning("Error applying translation to paragraph: %s", e)
-
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    try:
-                        if para.text.strip():
-                            cached = _translation_cache.get((para.text, lang))
-                            translated = cached if cached is not None else para.text
-                            if translated != para.text:
-                                if len(para.runs) >= 1:
-                                    para.runs[0].text = translated
-                                    for run in para.runs[1:]:
-                                        run.text = ""
-                            done += 1
-                    except Exception as e:
-                        errors += 1
-                        logger.warning("Error applying translation to cell: %s", e)
-
-    try:
-        doc.save(str(docx_path))
-        logger.info("Translated %d paragraphs in DOCX (%d new, %d errors)", done, translated, errors)
-    except Exception as e:
-        logger.error("Failed to save DOCX after translation: %s", e)
-
-
-def _replace_images_in_docx(docx_path):
-    """Replace inline images in DOCX with [LOGOMARCA]/[CARIMBO] text."""
-    from docx import Document
-    from docx.oxml.ns import qn
-    from docx.oxml import OxmlElement
-    from lxml import etree
-    import copy
-
-    doc = Document(str(docx_path))
-    replaced = 0
-
-    for para in doc.paragraphs:
-        # Check if paragraph contains images (drawing elements)
-        drawings = para._p.findall('.//' + qn('w:drawing'))
-        if drawings:
-            # Remove image runs, replace with placeholder text
-            for run in para.runs:
-                if run._r.findall('.//' + qn('w:drawing')):
-                    # Determine label based on position (simple heuristic)
-                    run.text   = "[LOGOMARCA]"
-                    run.italic = True
-                    # Remove the drawing element
-                    for drawing in run._r.findall('.//' + qn('w:drawing')):
-                        run._r.remove(drawing)
-                    replaced += 1
-
-    doc.save(str(docx_path))
-    if replaced:
-        logger.info("Replaced %d images with placeholders in DOCX", replaced)
-
-
-def _remove_images_from_docx(docx_path):
-    """Remove all images from DOCX file entirely."""
-    from docx import Document
-    from docx.oxml.ns import qn
-
-    doc = Document(str(docx_path))
-    removed = 0
-
-    for para in doc.paragraphs:
-        drawings = para._p.findall('.//' + qn('w:drawing'))
-        if not drawings:
-            drawings = para._p.findall('.//' + qn('wp:inline'))
-        if drawings:
-            for drawing in drawings:
-                para._p.remove(drawing)
-                removed += 1
-            # Clean up empty runs
-            for run in para.runs[:]:
-                if not run.text.strip() and not run._r.findall('.//' + qn('w:drawing')):
-                    if not run._r.findall('.//' + qn('wp:inline')):
-                        run._r.getparent().remove(run._r)
-
-    doc.save(str(docx_path))
-    if removed:
-        logger.info("Removed %d images from DOCX", removed)
-
-
-#  FILE PROCESSOR 
 
 def process_file(file_info, out_dir, lang, image_mode, do_translate):
     pdf = Path(file_info["upload_path"])
@@ -482,8 +213,8 @@ def process_file(file_info, out_dir, lang, image_mode, do_translate):
         docx_path = out_dir / docx_name
 
         logger.info("Processing: %s -> %s", pdf.name, docx_name)
-        pdf_to_docx(pdf, docx_path, lang=lang,
-                    do_translate=do_translate, image_mode=image_mode)
+        meta = convert_pdf_to_docx(pdf, docx_path, lang=lang,
+                                    do_translate=do_translate, image_mode=image_mode)
 
         if not docx_path.exists():
             raise RuntimeError("DOCX not created: " + str(docx_path))
@@ -496,6 +227,10 @@ def process_file(file_info, out_dir, lang, image_mode, do_translate):
             "output_name":  docx_name,
             "size_kb":      round(size_kb, 1),
             "status":       "completed",
+            "progress":     100,
+            "pdf_type":     meta.get("pdf_type", "text"),
+            "chars_extracted": meta.get("total_chars", 0),
+            "extraction_method": meta.get("extraction_method", "marker"),
         })
         return result
 
@@ -514,7 +249,6 @@ async def run_job(job_id, lang, image_mode, do_translate):
     job["started_at"] = datetime.now().isoformat()
     save_job(job)
 
-    _translation_cache.clear()
     loop  = asyncio.get_event_loop()
     files = job["files"]
     total = len(files)
@@ -523,15 +257,32 @@ async def run_job(job_id, lang, image_mode, do_translate):
     save_counter = 0
 
     for fi in files:
-        fi["status"] = "processing"
+        fi["status"] = "pending"
+        fi["progress"] = 0
     save_job(job)
 
     async def process_one(idx, fi):
         nonlocal save_counter, job
         async with sem:
-            updated = await loop.run_in_executor(
-                None, process_file, fi, out_dir, lang, image_mode, do_translate)
+            async with lock:
+                job["current_file"] = fi["name"]
+                job["files"][idx]["status"] = "processing"
+                job["files"][idx]["progress"] = 10
+                save_job(job)
+            try:
+                future = loop.run_in_executor(
+                    None, process_file, fi, out_dir, lang, image_mode, do_translate)
+                updated = await asyncio.wait_for(future, timeout=FILE_TIMEOUT_SECONDS)
+            except asyncio.TimeoutError:
+                logger.error("Timeout processing %s after %.1fs", fi["name"], FILE_TIMEOUT_SECONDS)
+                updated = dict(fi)
+                updated.update({
+                    "status": "failed",
+                    "progress": 100,
+                    "error": "Exceeded 3 minutes per file",
+                })
         async with lock:
+            updated.setdefault("progress", 100)
             job["files"][idx] = updated
             if updated.get("status") == "completed":
                 job["processed"] += 1
@@ -540,8 +291,7 @@ async def run_job(job_id, lang, image_mode, do_translate):
             job["percentage"] = round(
                 (job["processed"] + job["failed"]) / total * 100, 1)
             save_counter += 1
-            if save_counter % 5 == 0:
-                save_job(job)
+            save_job(job)
 
     try:
         await asyncio.gather(*[process_one(i, f) for i, f in enumerate(files)])
@@ -557,7 +307,6 @@ async def run_job(job_id, lang, image_mode, do_translate):
 
     save_job(job)
 
-    # Create ZIP
     zip_path = OUTPUT_DIR / (job_id + "_all.zip")
     added = 0
     with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
@@ -577,8 +326,6 @@ async def run_job(job_id, lang, image_mode, do_translate):
     save_job(job)
 
 
-#  ROUTES 
-
 @app.get("/", response_class=HTMLResponse)
 async def root():
     index = STATIC_DIR / "index.html"
@@ -592,9 +339,8 @@ async def root():
 @app.get("/api/health")
 async def health():
     deps = {}
-    for lib, label in [("fitz", "PyMuPDF"), ("pytesseract", "Tesseract"),
-                        ("deep_translator", "deep-translator"),
-                        ("docx", "python-docx"), ("pdf2docx", "pdf2docx")]:
+    for lib, label in [("marker", "Marker"), ("deep_translator", "deep-translator"),
+                        ("docx", "python-docx")]:
         try:
             __import__(lib)
             deps[label] = "ok"
@@ -606,6 +352,7 @@ async def health():
         "output_dir":  str(OUTPUT_DIR),
         "index_html_exists": (STATIC_DIR / "index.html").exists(),
         "dependencies": deps,
+        "engine": "Marker AI",
     }
 
 
@@ -618,34 +365,51 @@ async def upload_files(files: List[UploadFile] = File(...)):
 
     for upload in files:
         filename  = upload.filename or ("file_" + str(uuid.uuid4()) + ".pdf")
-        safe_name = "".join(c for c in filename
-                            if c.isalnum() or c in "._- ()").strip() or "file.pdf"
+        safe_name = sanitize_filename(filename)
         dest    = up_dir / safe_name
         content = await upload.read()
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, safe_name + " is too large")
         dest.write_bytes(content)
 
         if safe_name.lower().endswith(".zip"):
             try:
                 with zipfile.ZipFile(str(dest)) as zf:
-                    for name in zf.namelist():
-                        if name.lower().endswith(".pdf") and not name.startswith("__MACOSX"):
-                            ep = up_dir / Path(name).name
-                            ep.write_bytes(zf.read(name))
+                    pdf_infos = [
+                        info for info in zf.infolist()
+                        if info.filename.lower().endswith(".pdf")
+                        and not info.filename.startswith("__MACOSX")
+                        and not info.is_dir()
+                    ]
+                    if len(pdf_infos) > MAX_ZIP_MEMBERS:
+                        raise HTTPException(413, safe_name + " has too many PDFs")
+                    total_uncompressed = sum(info.file_size for info in pdf_infos)
+                    if total_uncompressed > MAX_ZIP_TOTAL_BYTES:
+                        raise HTTPException(413, safe_name + " is too large after extraction")
+                    for info in pdf_infos:
+                            ep_name = sanitize_filename(Path(info.filename).name)
+                            ep = up_dir / ep_name
+                            if ep.exists():
+                                ep = up_dir / (str(uuid.uuid4())[:8] + "_" + ep_name)
+                            ep.write_bytes(zf.read(info))
                             pdfs.append({"id": str(uuid.uuid4()), "name": ep.name,
                                          "size": ep.stat().st_size,
-                                         "upload_path": str(ep), "status": "pending"})
+                                         "upload_path": str(ep), "status": "pending",
+                                         "progress": 0})
                 dest.unlink()
             except zipfile.BadZipFile:
                 raise HTTPException(400, safe_name + " is not a valid ZIP")
         elif safe_name.lower().endswith(".pdf"):
             pdfs.append({"id": str(uuid.uuid4()), "name": safe_name,
-                         "size": len(content), "upload_path": str(dest), "status": "pending"})
+                         "size": len(content), "upload_path": str(dest), "status": "pending",
+                         "progress": 0})
 
     if not pdfs:
         raise HTTPException(400, "No PDF found.")
 
     job = {"job_id": job_id, "status": "pending", "total": len(pdfs),
            "processed": 0, "failed": 0, "percentage": 0.0, "files": pdfs,
+           "current_file": "",
            "created_at": datetime.now().isoformat(),
            "target_language": "pt", "image_mode": "placeholder"}
     save_job(job)
@@ -658,7 +422,6 @@ async def start_processing(req: ProcessRequest, background_tasks: BackgroundTask
     if job["status"] == "processing":
         raise HTTPException(400, "Already processing")
 
-    # do_translate = False if language is "none" or "original"
     do_translate = req.target_language not in ("none", "original", "")
     image_mode   = "remove" if req.remove_images else req.image_mode
 

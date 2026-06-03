@@ -1,136 +1,76 @@
-# 📄 PDF Tradutor Pro
+# PDF Tradutor Pro
 
-Sistema web completo para converter e traduzir PDFs em lote para DOCX automaticamente.
+Aplicacao web local para converter PDFs em DOCX, traduzir o texto e remover imagens/logos do documento final.
 
-## ✨ Funcionalidades
+## Objetivo
 
-- **Upload em lote** — 1 a 100+ PDFs, ficheiros individuais, múltiplos ou ZIP
-- **Detecção automática** — distingue PDFs de texto e PDFs digitalizados (escaneados)
-- **OCR inteligente** — extrai texto de PDFs com imagens via Tesseract
-- **Tradução automática** — para Português, Inglês, Espanhol, Francês, Alemão e mais
-- **Geração de DOCX** — preserva negrito, itálico, tamanhos de fonte e estrutura
-- **Fila de processamento** — progresso em tempo real com estatísticas
-- **Download em ZIP** — todos os DOCX traduzidos num único ficheiro
-- **Histórico** — trabalhos anteriores com opção de re-download
+O fluxo principal e:
 
-## 🚀 Instalação e Arranque
+1. Enviar um ou mais PDFs, ou um ZIP com PDFs.
+2. Converter cada PDF para DOCX preservando tabelas, fontes, colunas e espacamento com `pdf2docx`.
+3. Traduzir texto em paragrafos e tabelas no DOCX.
+4. Remover imagens/logos/carimbos do DOCX final por padrao.
+5. Disponibilizar download individual e ZIP com todos os DOCX.
 
-### 1. Clonar / extrair o projecto
+> Nota: PDF nao e um formato editavel. A preservacao de layout depende da qualidade do PDF original. `pdf2docx` e usado como caminho principal porque preserva melhor a infraestrutura visual do ficheiro do que reconstrucoes manuais.
 
-```bash
-cd pdf-translator
-```
+## Limites Operacionais
 
-### 2. Criar ambiente virtual (recomendado)
+- Tempo maximo por ficheiro: 3 minutos.
+- Upload maximo por ficheiro: 100 MB.
+- ZIP maximo: 100 PDFs.
+- ZIP maximo descompactado: 100 MB.
+- Jobs, uploads e outputs sao artefatos locais e nao devem ser versionados.
+
+## Instalar
 
 ```bash
 python -m venv venv
-source venv/bin/activate        # Linux/Mac
-venv\Scripts\activate           # Windows
-```
-
-### 3. Instalar dependências Python
-
-```bash
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 4. Instalar Tesseract OCR (para PDFs digitalizados)
+Para OCR no futuro, instale tambem o Tesseract no sistema operacional. O fluxo atual prioriza PDFs com texto extraivel e conversao fiel via `pdf2docx`.
 
-**Ubuntu/Debian:**
-```bash
-sudo apt install tesseract-ocr tesseract-ocr-por tesseract-ocr-eng
-```
-
-**macOS:**
-```bash
-brew install tesseract tesseract-lang
-```
-
-**Windows:**
-Descarregar instalador em: https://github.com/UB-Mannheim/tesseract/wiki
-
-### 5. Iniciar o servidor
+## Rodar
 
 ```bash
 python main.py
 ```
 
-Ou com uvicorn directamente:
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
+Depois abra:
 
-### 6. Abrir no browser
-
-```
+```text
 http://localhost:8000
 ```
 
-## 📁 Estrutura do Projecto
+## API
 
-```
-pdf-translator/
-├── main.py              # Backend FastAPI
-├── requirements.txt     # Dependências Python
-├── static/
-│   └── index.html       # Frontend completo (HTML/CSS/JS)
-├── uploads/             # PDFs enviados (gerado automaticamente)
-├── outputs/             # DOCX traduzidos (gerado automaticamente)
-└── jobs/                # Estado dos trabalhos em JSON
-```
+| Metodo | Endpoint | Descricao |
+| --- | --- | --- |
+| `POST` | `/api/upload` | Envia PDFs ou ZIP |
+| `POST` | `/api/process` | Inicia conversao/traducao |
+| `GET` | `/api/jobs/{id}` | Consulta estado e progresso |
+| `GET` | `/api/jobs` | Lista historico local |
+| `GET` | `/api/download/{id}/zip` | Baixa ZIP com DOCX |
+| `GET` | `/api/download/{id}/file/{fid}` | Baixa DOCX individual |
+| `DELETE` | `/api/jobs/{id}` | Remove job e ficheiros |
+| `GET` | `/api/health` | Estado da API e dependencias |
 
-## 🔄 Fluxo de Processamento
+## Testes
 
-```
-Upload PDFs/ZIP
-      ↓
-Análise do tipo (texto ou digitalizado)
-      ↓
-Extracção de texto (PyMuPDF / pdfminer)
-      ↓ (se digitalizado)
-OCR via Tesseract
-      ↓
-Tradução via Google Translate (deep-translator)
-      ↓
-Geração de DOCX (python-docx)
-      ↓
-Compactação em ZIP
-      ↓
-Download
+```bash
+python -m pytest tests/test_backend.py -q
 ```
 
-## 🌐 API Endpoints
+## Estrutura
 
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| `POST` | `/api/upload` | Enviar ficheiros PDF/ZIP |
-| `POST` | `/api/process` | Iniciar processamento |
-| `GET`  | `/api/jobs/{id}` | Estado de um trabalho |
-| `GET`  | `/api/jobs` | Listar todos os trabalhos |
-| `GET`  | `/api/download/{id}/zip` | Descarregar ZIP com todos os DOCX |
-| `GET`  | `/api/download/{id}/file/{fid}` | Descarregar DOCX individual |
-| `DELETE` | `/api/jobs/{id}` | Eliminar trabalho e ficheiros |
-| `GET`  | `/api/health` | Estado da API e dependências |
-
-## ⚙️ Idiomas Suportados
-
-| Código | Idioma |
-|--------|--------|
-| `pt` | Português |
-| `en` | Inglês |
-| `es` | Espanhol |
-| `fr` | Francês |
-| `de` | Alemão |
-| `it` | Italiano |
-| `zh-cn` | Chinês (Simplificado) |
-| `ar` | Árabe |
-| `ru` | Russo |
-| `ja` | Japonês |
-
-## 📝 Notas
-
-- A tradução usa a API gratuita do Google Translate via `deep-translator`
-- Para uso intensivo, considere uma API paga (DeepL, OpenAI, etc.)
-- O OCR requer o Tesseract instalado no sistema operativo
-- Os ficheiros processados são guardados localmente em `outputs/`
+```text
+main.py              Backend FastAPI
+static/index.html    Frontend HTML/CSS/JS
+requirements.txt     Dependencias Python
+tests/               Testes de backend
+uploads/             PDFs enviados, gerado localmente
+outputs/             DOCX/ZIP gerados, localmente
+jobs/                Estado dos jobs, localmente
+```

@@ -1,2 +1,7 @@
 __pycache__
 venv
+uploads/
+outputs/
+jobs/
+*.pyc
+.pytest_cache/

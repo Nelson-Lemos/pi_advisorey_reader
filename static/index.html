@@ -476,6 +476,159 @@ header {
   flex-wrap: wrap;
 }
 
+/* ── Floating Progress ── */
+.floating-progress {
+  display: none;
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  z-index: 9998;
+  animation: float-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.floating-progress.visible { display: block; }
+
+@keyframes float-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.floating-progress.minimized {
+  width: auto;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.floating-progress.minimized .fp-body,
+.floating-progress.minimized .fp-header-title,
+.floating-progress.minimized .fp-close { display: none; }
+
+.floating-progress.minimized .fp-header { margin-bottom: 0; }
+
+.fp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.fp-header-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fp-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.fp-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text3);
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.fp-btn:hover { color: var(--text2); background: var(--surface2); }
+
+.fp-current {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fp-bar-wrap {
+  height: 6px;
+  background: var(--surface2);
+  border-radius: 100px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.fp-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #c084fc);
+  border-radius: 100px;
+  transition: width 0.5s ease;
+  width: 0%;
+}
+
+.fp-bar-fill.completed { background: var(--green); }
+
+.fp-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.fp-pct {
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent2);
+}
+
+.fp-count {
+  color: var(--text3);
+}
+
+.fp-mini-bar {
+  display: none;
+  height: 3px;
+  background: var(--accent-dim);
+  border-radius: 100px;
+  overflow: hidden;
+  width: 80px;
+}
+
+.floating-progress.minimized .fp-mini-bar { display: block; }
+
+.fp-mini-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 100px;
+  transition: width 0.5s ease;
+  width: 0%;
+}
+
+.floating-progress.minimized .fp-pct-mini {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--text2);
+  flex-shrink: 0;
+}
+
+.fp-mini-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .btn {
   padding: 12px 24px;
   border: none;
@@ -966,6 +1119,35 @@ header {
 <!-- Toast Container -->
 <div id="toastContainer"></div>
 
+<!-- Floating Progress -->
+<div class="floating-progress" id="floatingProgress" onclick="if(this.classList.contains('minimized')){toggleFloatProgress()}">
+  <div class="fp-header">
+    <div class="fp-header-title" id="fpTitle">A processar...</div>
+    <div class="fp-header-actions">
+      <button class="fp-btn" id="fpToggleBtn" onclick="event.stopPropagation();toggleFloatProgress()">
+        <i data-lucide="chevron-down" size="16" id="fpToggleIcon"></i>
+      </button>
+      <button class="fp-btn fp-close" onclick="event.stopPropagation();hideFloatingProgress()">
+        <i data-lucide="x" size="14"></i>
+      </button>
+    </div>
+  </div>
+  <div class="fp-body">
+    <div class="fp-current" id="fpCurrent">A preparar...</div>
+    <div class="fp-bar-wrap">
+      <div class="fp-bar-fill" id="fpBar" style="width:0%"></div>
+    </div>
+    <div class="fp-stats">
+      <span class="fp-pct" id="fpPct">0%</span>
+      <span class="fp-count" id="fpCount">0 / 0</span>
+    </div>
+  </div>
+  <div class="fp-mini-inner">
+    <div class="fp-mini-bar"><div class="fp-mini-fill" id="fpMiniBar" style="width:0%"></div></div>
+    <span class="fp-pct-mini" id="fpPctMini">0%</span>
+  </div>
+</div>
+
 <script>
 // State
 var currentJobId = null;
@@ -976,6 +1158,15 @@ var imageMode = "placeholder";
 // API base - auto detect port
 var API_BASE = (window.location.port === '8000' || window.location.port === '')
   ? '' : 'http://127.0.0.1:8000';
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 // Tab navigation
 function showTab(tab) {
@@ -1032,10 +1223,11 @@ function renderFileList() {
   count.textContent = pendingFiles.length + (pendingFiles.length === 1 ? ' ficheiro' : ' ficheiros');
   list.innerHTML = pendingFiles.map(function(f, i) {
     var iconName = f.name.endsWith('.zip') ? 'file-archive' : 'file-text';
+    var safeName = escapeHtml(f.name);
     return '<div class="file-item" id="pending-' + i + '">' +
       '<div class="file-icon"><i data-lucide="' + iconName + '" size="18"></i></div>' +
       '<div class="file-meta">' +
-        '<div class="file-name" title="' + f.name + '">' + f.name + '</div>' +
+        '<div class="file-name" title="' + safeName + '">' + safeName + '</div>' +
         '<div class="file-size">' + formatBytes(f.size) + '</div>' +
         '<div class="file-progress"><div class="file-progress-bar"></div></div>' +
       '</div>' +
@@ -1060,6 +1252,7 @@ function clearFiles() {
   document.getElementById('progressCard').classList.remove('visible');
   document.getElementById('resultCard').classList.remove('visible');
   document.getElementById('actionBar').style.display = '';
+  hideFloatingProgress();
   stopPolling();
 }
 
@@ -1089,6 +1282,7 @@ async function startProcessing() {
     document.getElementById('progressCard').classList.add('visible');
     document.getElementById('actionBar').style.display = 'none';
     updateProgress({ processed: 0, failed: 0, total: uploadRes.files_count, percentage: 0 });
+    showFloatingProgress('A processar...', uploadRes.files_count + ' ficheiro(s) enviados');
 
     await api('POST', '/api/process', {
       job_id: currentJobId,
@@ -1115,15 +1309,18 @@ function renderUploadedFiles(files) {
   section.classList.add('visible');
   count.textContent = files.length + (files.length === 1 ? ' ficheiro' : ' ficheiros');
   list.innerHTML = files.map(function(f) {
+    var safeId = escapeHtml(f.id);
+    var safeName = escapeHtml(f.name);
     return '<div class="file-item" id="file-' + f.id + '">' +
       '<div class="file-icon"><i data-lucide="file-text" size="18"></i></div>' +
       '<div class="file-meta">' +
-        '<div class="file-name" title="' + f.name + '">' + f.name + '</div>' +
+        '<div class="file-name" title="' + safeName + '">' + safeName + '</div>' +
         '<div class="file-size">' + formatBytes(f.size) + '</div>' +
-        '<div class="file-progress"><div class="file-progress-bar" id="prog-' + f.id + '"></div></div>' +
+        '<div class="file-progress"><div class="file-progress-bar" id="prog-' + safeId + '"></div></div>' +
       '</div>' +
-      '<div class="file-status pending" id="status-' + f.id + '">pendente</div>' +
-      '<span id="action-' + f.id + '"></span>' +
+      '<div class="file-status pending" id="status-' + safeId + '">pendente</div>' +
+      '<span id="badge-' + safeId + '"></span>' +
+      '<span id="action-' + safeId + '"></span>' +
     '</div>';
   }).join('');
   lucide.createIcons();
@@ -1150,6 +1347,7 @@ async function pollJobStatus() {
       onJobComplete(job);
     } else if (job.status === 'failed') {
       stopPolling();
+      hideFloatingProgress();
       toast('O processamento falhou', 'error');
     }
   } catch(e) {
@@ -1166,6 +1364,53 @@ function updateProgress(job) {
   document.getElementById('statTotal').textContent     = job.total     || 0;
   var remaining = (job.total || 0) - (job.processed || 0) - (job.failed || 0);
   document.getElementById('statRemaining').textContent = Math.max(0, remaining);
+  var proc = (job.processed || 0) + (job.failed || 0);
+  var tot  = job.total || 0;
+  updateFloatingProgress(pct, proc, tot, job.current_file || '');
+}
+
+// Floating progress card
+function showFloatingProgress(title, currentFile) {
+  var el = document.getElementById('floatingProgress');
+  document.getElementById('fpTitle').textContent = title || 'A processar...';
+  document.getElementById('fpCurrent').textContent = currentFile || 'A preparar...';
+  el.classList.remove('minimized');
+  el.classList.add('visible');
+  lucide.createIcons();
+}
+
+function updateFloatingProgress(pct, processed, total, currentFile) {
+  document.getElementById('fpBar').style.width = pct + '%';
+  document.getElementById('fpMiniBar').style.width = pct + '%';
+  document.getElementById('fpPct').textContent = Math.round(pct) + '%';
+  document.getElementById('fpPctMini').textContent = Math.round(pct) + '%';
+  document.getElementById('fpCount').textContent = processed + ' / ' + total;
+  if (currentFile) {
+    document.getElementById('fpCurrent').textContent = currentFile;
+  }
+  var barEl = document.getElementById('fpBar');
+  if (pct >= 100) {
+    barEl.classList.add('completed');
+  } else {
+    barEl.classList.remove('completed');
+  }
+}
+
+function hideFloatingProgress() {
+  var el = document.getElementById('floatingProgress');
+  el.classList.remove('visible');
+}
+
+function toggleFloatProgress() {
+  var el = document.getElementById('floatingProgress');
+  el.classList.toggle('minimized');
+  var icon = document.getElementById('fpToggleIcon');
+  if (el.classList.contains('minimized')) {
+    icon.setAttribute('data-lucide', 'chevron-up');
+  } else {
+    icon.setAttribute('data-lucide', 'chevron-down');
+  }
+  lucide.createIcons();
 }
 
 function updateFileStatuses(files) {
@@ -1181,6 +1426,7 @@ function updateFileStatuses(files) {
     var progBar = document.getElementById('prog-' + f.id);
     if (progBar) {
       progBar.className = 'file-progress-bar';
+      var filePct = typeof f.progress === 'number' ? Math.max(0, Math.min(100, f.progress)) : null;
       if (f.status === 'completed') {
         progBar.style.width = '100%';
         progBar.classList.add('completed');
@@ -1188,10 +1434,14 @@ function updateFileStatuses(files) {
         progBar.style.width = '100%';
         progBar.classList.add('failed');
       } else if (f.status === 'processing') {
-        progBar.style.width = '';
-        progBar.classList.add('indeterminate');
+        if (filePct !== null) {
+          progBar.style.width = filePct + '%';
+        } else {
+          progBar.style.width = '';
+          progBar.classList.add('indeterminate');
+        }
       } else {
-        progBar.style.width = '0%';
+        progBar.style.width = (filePct || 0) + '%';
       }
     }
     if (actionEl && f.status === 'completed') {
@@ -1199,12 +1449,22 @@ function updateFileStatuses(files) {
       actionEl.innerHTML = '<a href="' + dlUrl + '" class="btn btn-secondary btn-sm" style="text-decoration:none" download><i data-lucide="download" size="14"></i></a>';
       lucide.createIcons();
     }
+    var badgeEl = document.getElementById('badge-' + f.id);
+    if (badgeEl) {
+      if (f.extraction_method === 'marker') {
+        badgeEl.innerHTML = '<span class="marker-badge" style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;background:rgba(124,92,252,0.12);border:1px solid rgba(124,92,252,0.2);border-radius:100px;font-size:10px;font-family:\'DM Mono\',monospace;color:var(--accent2);margin-right:6px"><i data-lucide="bot" size="10"></i> Marker</span>';
+        lucide.createIcons();
+      } else {
+        badgeEl.innerHTML = '';
+      }
+    }
   });
 }
 
 function onJobComplete(job) {
   document.getElementById('resultCard').classList.add('visible');
   document.getElementById('progressCard').classList.remove('visible');
+  hideFloatingProgress();
 
   var ok    = job.processed || 0;
   var fail  = job.failed    || 0;
@@ -1219,26 +1479,30 @@ function onJobComplete(job) {
   var listEl = document.getElementById('resultFileList');
   if (listEl && job.files) {
     listEl.innerHTML = job.files.map(function(f) {
+      var safeFileName = escapeHtml(f.name);
+      var safeError = escapeHtml(f.error || 'falhou');
       if (f.status !== 'completed') {
         return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;' +
           'background:var(--red-dim);border:1px solid rgba(239,68,68,0.2);' +
           'border-radius:8px;font-size:13px">' +
           '<span style="color:var(--red)"><i data-lucide="x-circle" size="18"></i></span>' +
-          '<span style="flex:1;color:var(--text2)">' + f.name + '</span>' +
-          '<span style="font-size:11px;color:var(--red)">' + (f.error || 'falhou') + '</span>' +
+          '<span style="flex:1;color:var(--text2)">' + safeFileName + '</span>' +
+          '<span style="font-size:11px;color:var(--red)">' + safeError + '</span>' +
           '</div>';
       }
       var dlUrl  = API_BASE + '/api/download/' + currentJobId + '/file/' + f.id;
       var ptype  = f.pdf_type === 'scanned' ? ' [OCR]' : '';
       var chars  = f.chars_extracted ? f.chars_extracted + ' chars' : '';
+      var methodBadge = f.extraction_method === 'marker' ? ' <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 6px;background:rgba(124,92,252,0.12);border:1px solid rgba(124,92,252,0.2);border-radius:100px;font-size:9px;font-family:\'DM Mono\',monospace;color:var(--accent2)"><i data-lucide="bot" size="9"></i> Marker</span>' : '';
       var fname  = f.output_name || f.name;
+      var safeOutputName = escapeHtml(fname);
       return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;' +
         'background:var(--green-dim);border:1px solid rgba(34,197,94,0.2);' +
         'border-radius:8px;font-size:13px">' +
         '<span><i data-lucide="file-text" size="18"></i></span>' +
         '<span style="flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"' +
-          ' title="' + fname + '">' + fname + ptype + '</span>' +
-        '<span style="font-size:11px;color:var(--text3);flex-shrink:0">' + chars + '</span>' +
+          ' title="' + safeOutputName + '">' + safeOutputName + ptype + methodBadge + '</span>' +
+        '<span style="font-size:11px;color:var(--text3);flex-shrink:0">' + escapeHtml(chars) + '</span>' +
         '<a href="' + dlUrl + '" download style="padding:5px 14px;background:var(--green);' +
           'color:#fff;border-radius:6px;text-decoration:none;font-size:12px;font-weight:500;flex-shrink:0">' +
           '<i data-lucide="download" size="14"></i> DOCX</a>' +
@@ -1262,12 +1526,12 @@ function onJobComplete(job) {
       var listEl = document.getElementById('resultFileList');
       if (listEl) {
         var extra = data.files.map(function(f) {
-          var dlUrl = API_BASE + '/api/download/' + currentJobId + '/file/direct?name=' + encodeURIComponent(f.name);
+          var safeName = escapeHtml(f.name);
           return '<div style="display:flex;align-items:center;gap:12px;padding:8px 14px;' +
             'background:var(--green-dim);border:1px solid rgba(34,197,94,0.2);' +
             'border-radius:8px;font-size:12px;margin-top:4px">' +
             '<span><i data-lucide="file-text" size="16"></i></span>' +
-            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + f.name + '</span>' +
+            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + safeName + '</span>' +
             '<span style="color:var(--text3)">' + f.size_kb + ' KB</span>' +
             '</div>';
         }).join('');
@@ -1341,28 +1605,30 @@ async function loadHistory() {
 function historyCard(job) {
   var iconMap = { completed: 'check-circle', processing: 'loader', failed: 'x-circle', pending: 'clock' };
   var date  = new Date(job.created_at).toLocaleString('pt-PT');
+  var jobId = encodeURIComponent(job.job_id || '');
+  var status = String(job.status || 'pending').replace(/[^a-z-]/g, '');
   var zipBtn = '';
   if (job.status === 'completed' && job.zip_path) {
-    zipBtn = '<a href="' + API_BASE + '/api/download/' + job.job_id + '/zip" ' +
+    zipBtn = '<a href="' + API_BASE + '/api/download/' + jobId + '/zip" ' +
       'class="btn btn-download btn-sm" style="text-decoration:none" download><i data-lucide="download" size="14"></i> ZIP</a>';
   }
   var statusIcon = iconMap[job.status] || 'file-text';
   var isProcessing = job.status === 'processing';
   return '<div class="history-card">' +
-    '<div class="h-status-icon ' + job.status + '">' +
+    '<div class="h-status-icon ' + status + '">' +
       '<i data-lucide="' + statusIcon + '" size="20"' + (isProcessing ? ' class="spinner-icon"' : '') + '></i>' +
     '</div>' +
     '<div class="h-info">' +
-      '<div class="h-title">' + job.total + ' PDF(s) - ' + (job.target_language || 'pt').toUpperCase() + '</div>' +
+      '<div class="h-title">' + Number(job.total || 0) + ' PDF(s) - ' + escapeHtml(job.target_language || 'pt').toUpperCase() + '</div>' +
       '<div class="h-meta">' +
-        '<span><i data-lucide="calendar" size="12"></i> ' + date + '</span>' +
-        '<span><i data-lucide="check-circle" size="12"></i> ' + job.processed + '/' + job.total + '</span>' +
-        (job.failed ? '<span style="color:var(--red)"><i data-lucide="x-circle" size="12"></i> ' + job.failed + ' falhados</span>' : '') +
-        '<span><i data-lucide="trending-up" size="12"></i> ' + job.percentage + '%</span>' +
+        '<span><i data-lucide="calendar" size="12"></i> ' + escapeHtml(date) + '</span>' +
+        '<span><i data-lucide="check-circle" size="12"></i> ' + Number(job.processed || 0) + '/' + Number(job.total || 0) + '</span>' +
+        (job.failed ? '<span style="color:var(--red)"><i data-lucide="x-circle" size="12"></i> ' + Number(job.failed || 0) + ' falhados</span>' : '') +
+        '<span><i data-lucide="trending-up" size="12"></i> ' + Number(job.percentage || 0) + '%</span>' +
       '</div>' +
     '</div>' +
     '<div class="h-actions">' + zipBtn +
-      '<button class="btn btn-ghost btn-sm" onclick="deleteJob(\'' + job.job_id + '\')"><i data-lucide="trash-2" size="14"></i></button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="deleteJob(\'' + jobId + '\')"><i data-lucide="trash-2" size="14"></i></button>' +
     '</div>' +
     '</div>';
 }
@@ -1403,7 +1669,7 @@ function toast(msg, type) {
   var el  = document.createElement('div');
   el.className = 'toast ' + type;
   var iconMap = { success: 'check-circle', error: 'x-circle', info: 'info' };
-  el.innerHTML = '<span><i data-lucide="' + (iconMap[type] || 'info') + '" size="16"></i></span><span>' + msg + '</span>';
+  el.innerHTML = '<span><i data-lucide="' + (iconMap[type] || 'info') + '" size="16"></i></span><span>' + escapeHtml(msg) + '</span>';
   lucide.createIcons();
   document.getElementById('toastContainer').appendChild(el);
   setTimeout(function(){ el.remove(); }, 4000);
